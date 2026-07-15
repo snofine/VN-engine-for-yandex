@@ -328,35 +328,38 @@ function fadeInBGM() {
     }, 30);
 }
 
-// Parse slash tags and format dialogue text dynamically
+// Parse formatting tags and format dialogue text dynamically
 function parseDialogueText(text) {
     if (!text) return "";
     
-    // Escape standard HTML tags to prevent arbitrary code execution
+    // First, escape all HTML tags to prevent execution of untrusted scripts/frames
     let escaped = text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
         
-    // Replace slash tags:
-    // /b/text/b/ -> <b>text</b>
-    escaped = escaped.replace(/\/b\/(.*?)\/b\//gs, "<b>$1</b>");
+    // 1. Support standard HTML/XML tags by restoring them from escaped state:
+    escaped = escaped.replace(/&lt;b&gt;(.*?)&lt;\/b&gt;/gsi, "<b>$1</b>");
+    escaped = escaped.replace(/&lt;i&gt;(.*?)&lt;\/i&gt;/gsi, "<i>$1</i>");
+    escaped = escaped.replace(/&lt;u&gt;(.*?)&lt;\/u&gt;/gsi, "<u>$1</u>");
+    escaped = escaped.replace(/&lt;s&gt;(.*?)&lt;\/s&gt;/gsi, "<s>$1</s>");
     
-    // /i/text/i/ -> <i>text</i>
-    escaped = escaped.replace(/\/i\/(.*?)\/i\//gs, "<i>$1</i>");
-    
-    // /u/text/u/ -> <u>text</u>
-    escaped = escaped.replace(/\/u\/(.*?)\/u\//gs, "<u>$1</u>");
-    
-    // /s/text/s/ -> <s>text</s> (strikethrough)
-    escaped = escaped.replace(/\/s\/(.*?)\/s\//gs, "<s>$1</s>");
-    
-    // /shake/text/shake/ -> <span class="shake-text">text</span>
-    escaped = escaped.replace(/\/shake\/(.*?)\/shake\//gs, '<span class="shake-text">$1</span>');
+    // Custom tags in HTML format:
+    // <shake>text</shake> -> <span class="shake-text">text</span>
+    escaped = escaped.replace(/&lt;shake&gt;(.*?)&lt;\/shake&gt;/gsi, '<span class="shake-text">$1</span>');
+    // <color=red>text</color> -> <span style="color: $1">$2</span>
+    escaped = escaped.replace(/&lt;color=([\w#]+)&gt;(.*?)&lt;\/color&gt;/gsi, '<span style="color: $1">$2</span>');
+    // <color color="red">text</color> -> <span style="color: $1">$2</span>
+    escaped = escaped.replace(/&lt;color\s+color="([\w#]+)"&gt;(.*?)&lt;\/color&gt;/gsi, '<span style="color: $1">$2</span>');
+    escaped = escaped.replace(/&lt;color\s+color='([\w#]+)'&gt;(.*?)&lt;\/color&gt;/gsi, '<span style="color: $1">$2</span>');
 
-    // /color=value/text/color/ -> <span style="color: value">text</span>
-    // Validate color value to prevent CSS injection
-    escaped = escaped.replace(/\/color=([\w#]+)\/(.*?)\/color\//gs, '<span style="color: $1">$2</span>');
+    // 2. Keep backward compatibility with slash tags:
+    escaped = escaped.replace(/\/b\/(.*?)\/b\//gsi, "<b>$1</b>");
+    escaped = escaped.replace(/\/i\/(.*?)\/i\//gsi, "<i>$1</i>");
+    escaped = escaped.replace(/\/u\/(.*?)\/u\//gsi, "<u>$1</u>");
+    escaped = escaped.replace(/\/s\/(.*?)\/s\//gsi, "<s>$1</s>");
+    escaped = escaped.replace(/\/shake\/(.*?)\/shake\//gsi, '<span class="shake-text">$1</span>');
+    escaped = escaped.replace(/\/color=([\w#]+)\/(.*?)\/color\//gsi, '<span style="color: $1">$2</span>');
     
     return escaped;
 }

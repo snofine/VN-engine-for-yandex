@@ -62,7 +62,7 @@ window.storyData = {
                 {
                     "character_id": "alisa",
                     "speaker": "Алиса",
-                    "text": "Привет! Я твой /b/первый/b/ персонаж. Слышишь /i/музыку/i/ на фоне? Или посмотри на этот /color=#00ffff/бирюзовый/color/ текст!",
+                    "text": "Привет! Я твой <b>первый</b> персонаж. Слышишь <i>музыку</i> на фоне? Или посмотри на этот <color=#00ffff>бирюзовый</color> текст!",
                     "is_thought": false,
                     "text_bold": false,
                     "text_italic": false,
