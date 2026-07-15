@@ -258,7 +258,7 @@ function loadScene(sceneId) {
     }
 
     // Clear all sprites for fresh scene
-    ['sprite-left', 'sprite-center', 'sprite-right'].forEach(id => {
+    ['sprite-left', 'sprite-center', 'sprite-right', 'sprite-fullscreen'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.classList.remove('active');
@@ -565,7 +565,8 @@ function renderDialogueStep() {
     const spriteSlots = {
         'left': document.getElementById('sprite-left'),
         'center': document.getElementById('sprite-center'),
-        'right': document.getElementById('sprite-right')
+        'right': document.getElementById('sprite-right'),
+        'fullscreen': document.getElementById('sprite-fullscreen')
     };
 
     if (step.sprite) {
@@ -602,6 +603,8 @@ function renderDialogueStep() {
                 leftValue = '25%';
             } else if (slotName === 'right') {
                 leftValue = '75%';
+            } else if (slotName === 'fullscreen') {
+                slotName = 'fullscreen';
             } else {
                 slotName = 'center';
                 leftValue = '50%';
@@ -612,8 +615,10 @@ function renderDialogueStep() {
         if (targetSlot) {
             if (imgUrl) {
                 targetSlot.src = imgUrl;
-                targetSlot.style.left = leftValue;
-                targetSlot.style.bottom = bottomValue;
+                if (slotName !== 'fullscreen') {
+                    targetSlot.style.left = leftValue;
+                    targetSlot.style.bottom = bottomValue;
+                }
                 targetSlot.classList.add('active');
             } else {
                 targetSlot.classList.remove('active');

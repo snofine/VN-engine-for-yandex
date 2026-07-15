@@ -147,6 +147,21 @@ body {
     left: 75%;
 }
 
+.sprite-fullscreen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: opacity 0.3s ease-in-out;
+    opacity: 0;
+}
+
+.sprite-fullscreen.active {
+    opacity: 1;
+}
+
 /* ============================================================
    Dialogue Box Panel (Bottom)
    ============================================================ */

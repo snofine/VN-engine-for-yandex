@@ -551,7 +551,7 @@ class VisualNovelEditor(QMainWindow):
         diag_detail_layout.addRow("Тип позиции:", self.sprite_pos_type)
 
         self.sprite_pos_combo = QComboBox()
-        self.sprite_pos_combo.addItems(["center", "left", "right"])
+        self.sprite_pos_combo.addItems(["center", "left", "right", "fullscreen"])
         self.sprite_pos_combo.currentIndexChanged.connect(self.save_current_dialogue_fields)
         diag_detail_layout.addRow("Предустановка:", self.sprite_pos_combo)
 
