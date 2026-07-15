@@ -222,6 +222,33 @@ function loadScene(sceneId) {
     renderDialogueStep();
 }
 
+// Parse slash tags and format dialogue text dynamically
+function parseDialogueText(text) {
+    if (!text) return "";
+    
+    // Escape standard HTML tags to prevent arbitrary code execution,
+    // while keeping our custom formatting tags intact
+    let escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+        
+    // Replace slash tags:
+    // /b/text/b/ -> <b>text</b>
+    escaped = escaped.replace(/\/b\/(.*?)\/b\//g, "<b>$1</b>");
+    
+    // /i/text/i/ -> <i>text</i>
+    escaped = escaped.replace(/\/i\/(.*?)\/i\//g, "<i>$1</i>");
+    
+    // /u/text/u/ -> <u>text</u>
+    escaped = escaped.replace(/\/u\/(.*?)\/u\//g, "<u>$1</u>");
+
+    // /color=name_or_hex/text/color/ -> <span style="color: $1">$2</span>
+    escaped = escaped.replace(/\/color=(.*?)\/(.*?)\/color\//g, '<span style="color: $1">$2</span>');
+    
+    return escaped;
+}
+
 // Render dialogue step
 function renderDialogueStep() {
     const scene = window.storyData.scenes[currentSceneId];
@@ -253,7 +280,7 @@ function renderDialogueStep() {
         // Thought: Hide speaker name, format text in parentheses & italics
         speakerEl.style.display = 'none';
         speakerEl.innerText = "";
-        textEl.innerText = `(${step.text || ""})`;
+        textEl.innerHTML = `(${parseDialogueText(step.text || "")})`;
         textEl.style.fontStyle = 'italic';
     } else {
         // Standard Dialogue
@@ -273,7 +300,7 @@ function renderDialogueStep() {
             }
         }
         
-        textEl.innerText = step.text || "";
+        textEl.innerHTML = parseDialogueText(step.text || "");
         
         // Apply inline text formatting flags
         if (step.text_italic) {
