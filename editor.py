@@ -258,11 +258,23 @@ class VisualNovelEditor(QMainWindow):
         self.selected_music_lib_name = None
         self.selected_sfx_lib_name = None
         
-        self.is_updating_ui = False # Guard to prevent update recursion
+        # Signal blocking/reentrancy tracking
+        self.ui_update_nesting = 0
+        self.is_updating_ui = False
         
         self.init_ui()
         self.new_project() # Initialize with a clean project
         
+    def block_ui_updates(self):
+        self.ui_update_nesting += 1
+        self.is_updating_ui = True
+        
+    def unblock_ui_updates(self):
+        self.ui_update_nesting -= 1
+        if self.ui_update_nesting <= 0:
+            self.ui_update_nesting = 0
+            self.is_updating_ui = False
+
     def init_ui(self):
         # 1. Menu bar & ToolBar
         toolbar = QToolBar("Панель инструментов")
@@ -985,6 +997,10 @@ class VisualNovelEditor(QMainWindow):
         scene_splitter.setSizes([450, 450])
         details_splitter.setSizes([450, 450])
         
+        # Disable sub-panels initially until steps are selected
+        self.set_dialogue_fields_enabled(False)
+        self.set_choice_fields_enabled(False)
+        
     # Project File Management
     def new_project(self):
         self.project_path = None
@@ -1155,7 +1171,7 @@ class VisualNovelEditor(QMainWindow):
 
     # UI Refresh helpers
     def refresh_all_ui(self):
-        self.is_updating_ui = True
+        self.block_ui_updates()
         
         # Config inputs
         config = self.project_data.get("config", {})
@@ -1198,7 +1214,7 @@ class VisualNovelEditor(QMainWindow):
         # Refresh Scene list
         self.refresh_scene_list()
         
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def refresh_scene_list(self):
         self.scene_list.clear()
@@ -1214,6 +1230,7 @@ class VisualNovelEditor(QMainWindow):
         self.refresh_scene_comboboxes()
         
     def refresh_scene_comboboxes(self):
+        self.block_ui_updates()
         # Temp save selections
         curr_choice_target = self.choice_target_combo.currentText()
         curr_next_scene = self.next_scene_combo.currentText()
@@ -1245,6 +1262,7 @@ class VisualNovelEditor(QMainWindow):
         
         # Refresh SFX combo from library
         self.refresh_sfx_combo_list()
+        self.unblock_ui_updates()
 
     # GUI Profile handlers
     def gui_profile_changed(self, index):
@@ -1252,9 +1270,9 @@ class VisualNovelEditor(QMainWindow):
         
         if profile_name != "Пользовательский":
             preset_data = GUI_PRESETS[profile_name]
-            self.is_updating_ui = True
+            self.block_ui_updates()
             self.load_gui_fields(preset_data)
-            self.is_updating_ui = False
+            self.unblock_ui_updates()
             self.set_gui_fields_enabled(False)
             self.project_data["gui"] = dict(preset_data)
         else:
@@ -1311,6 +1329,29 @@ class VisualNovelEditor(QMainWindow):
         self.gui_choice_text_color.setEnabled(enabled)
         self.gui_choice_size.setEnabled(enabled)
         self.gui_font_family.setEnabled(enabled)
+
+    def set_dialogue_fields_enabled(self, enabled):
+        self.diag_is_thought.setEnabled(enabled)
+        self.diag_text_bold.setEnabled(enabled)
+        self.diag_text_italic.setEnabled(enabled)
+        self.diag_char_combo.setEnabled(enabled)
+        self.speaker_input.setEnabled(enabled)
+        self.text_input.setEnabled(enabled)
+        self.diag_sfx_combo.setEnabled(enabled)
+        self.diag_sfx_input.setEnabled(enabled)
+        self.diag_sprite_expr_combo.setEnabled(enabled)
+        self.sprite_input.setEnabled(enabled)
+        self.sprite_pos_type.setEnabled(enabled)
+        self.sprite_pos_combo.setEnabled(enabled)
+        self.sprite_x_coord.setEnabled(enabled)
+        self.sprite_y_coord.setEnabled(enabled)
+        
+        if enabled:
+            self.toggle_thought_ui_state()
+
+    def set_choice_fields_enabled(self, enabled):
+        self.choice_text_input.setEnabled(enabled)
+        self.choice_target_combo.setEnabled(enabled)
 
     def choose_color(self, line_edit):
         current_color_str = line_edit.text().strip()
@@ -1409,12 +1450,14 @@ class VisualNovelEditor(QMainWindow):
         self.choice_text_input.clear()
         self.choice_target_combo.setCurrentIndex(0)
         self.next_scene_combo.setCurrentIndex(0)
+        self.set_dialogue_fields_enabled(False)
+        self.set_choice_fields_enabled(False)
         
     def refresh_selected_scene_ui(self):
         if not self.selected_scene_id:
             return
             
-        self.is_updating_ui = True
+        self.block_ui_updates()
         scene = self.project_data["scenes"][self.selected_scene_id]
         
         # Match scene background combo selection
@@ -1509,7 +1552,12 @@ class VisualNovelEditor(QMainWindow):
         
         self.selected_dialogue_idx = None
         self.selected_choice_idx = None
-        self.is_updating_ui = False
+        
+        # Disable editing areas until selected
+        self.set_dialogue_fields_enabled(False)
+        self.set_choice_fields_enabled(False)
+        
+        self.unblock_ui_updates()
         
     def update_scene_bg(self, text):
         if self.is_updating_ui or not self.selected_scene_id: return
@@ -1615,8 +1663,11 @@ class VisualNovelEditor(QMainWindow):
         if index < 0 or self.is_updating_ui: return
         self.selected_dialogue_idx = index
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         step = self.project_data["scenes"][self.selected_scene_id]["dialogues"][index]
+        
+        # Enable editing fields since we have a valid index
+        self.set_dialogue_fields_enabled(True)
         
         # Load formatting
         self.diag_is_thought.setChecked(step.get("is_thought", False))
@@ -1721,7 +1772,7 @@ class VisualNovelEditor(QMainWindow):
             self.sprite_raw_widget.show()
             
         self.toggle_thought_ui_state()
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def clear_dialogue_fields(self):
         self.speaker_input.clear()
@@ -1741,12 +1792,16 @@ class VisualNovelEditor(QMainWindow):
         self.sprite_raw_widget.show()
         self.diag_sfx_combo.setCurrentIndex(0)
         self.sfx_raw_widget.hide()
+        self.set_dialogue_fields_enabled(False)
         
     def save_current_dialogue_fields(self):
         if self.is_updating_ui or not self.selected_scene_id or self.selected_dialogue_idx is None:
             return
             
         scene = self.project_data["scenes"][self.selected_scene_id]
+        if self.selected_dialogue_idx >= len(scene["dialogues"]):
+            return
+            
         step = scene["dialogues"][self.selected_dialogue_idx]
         
         step["is_thought"] = self.diag_is_thought.isChecked()
@@ -1777,8 +1832,8 @@ class VisualNovelEditor(QMainWindow):
             "image": sprite_img
         }
         
-        # Update list item text
-        self.is_updating_ui = True
+        # Update list item text without triggering recursive saves
+        self.block_ui_updates()
         text_preview = step["text"][:30] + "..." if len(step["text"]) > 30 else step["text"]
         list_item = self.dialogue_list.item(self.selected_dialogue_idx)
         if list_item:
@@ -1786,7 +1841,7 @@ class VisualNovelEditor(QMainWindow):
                 list_item.setText(f"{self.selected_dialogue_idx+1}. 💭 ({text_preview})")
             else:
                 list_item.setText(f"{self.selected_dialogue_idx+1}. [{step['speaker']}] {text_preview}")
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
 
     def diag_is_thought_changed(self, state):
         self.toggle_thought_ui_state()
@@ -1794,6 +1849,7 @@ class VisualNovelEditor(QMainWindow):
         
     def toggle_thought_ui_state(self):
         is_thought = self.diag_is_thought.isChecked()
+        # Only toggle speaker name and character selectors since formatting is still allowed
         self.diag_char_combo.setDisabled(is_thought)
         self.speaker_input.setDisabled(is_thought)
         if is_thought:
@@ -1851,7 +1907,7 @@ class VisualNovelEditor(QMainWindow):
         # Temp save selection
         curr = self.diag_char_combo.currentData()
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         self.diag_char_combo.clear()
         self.diag_char_combo.addItem("[Без персонажа / Рассказчик]", "")
         
@@ -1862,12 +1918,12 @@ class VisualNovelEditor(QMainWindow):
         idx = self.diag_char_combo.findData(curr)
         if idx >= 0:
             self.diag_char_combo.setCurrentIndex(idx)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
 
     def refresh_dialogue_sprite_expr_combo(self):
         curr_expr = self.diag_sprite_expr_combo.currentText()
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         self.diag_sprite_expr_combo.clear()
         self.diag_sprite_expr_combo.addItem("[Вручную / Путь к файлу]")
         
@@ -1881,7 +1937,7 @@ class VisualNovelEditor(QMainWindow):
         idx = self.diag_sprite_expr_combo.findText(curr_expr)
         if idx >= 0:
             self.diag_sprite_expr_combo.setCurrentIndex(idx)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
 
     def browse_sprite_image(self):
         if self.selected_dialogue_idx is None: return
@@ -1946,31 +2002,35 @@ class VisualNovelEditor(QMainWindow):
         if index < 0 or self.is_updating_ui: return
         self.selected_choice_idx = index
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         choice = self.project_data["scenes"][self.selected_scene_id]["choices"][index]
+        self.set_choice_fields_enabled(True)
         self.choice_text_input.setText(choice.get("text", ""))
         
         target = choice.get("next_scene", "")
         idx = self.choice_target_combo.findData(target)
         if idx >= 0: self.choice_target_combo.setCurrentIndex(idx)
         
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def save_choice_fields(self):
         if self.is_updating_ui or not self.selected_scene_id or self.selected_choice_idx is None:
             return
             
         scene = self.project_data["scenes"][self.selected_scene_id]
+        if self.selected_choice_idx >= len(scene["choices"]):
+            return
+            
         choice = scene["choices"][self.selected_choice_idx]
         
         choice["text"] = self.choice_text_input.text()
         choice["next_scene"] = self.choice_target_combo.currentData()
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         list_item = self.choices_list.item(self.selected_choice_idx)
         if list_item:
             list_item.setText(f"Выбор: {choice['text']} -> {choice['next_scene']}")
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def update_scene_jump(self, index):
         if self.is_updating_ui or not self.selected_scene_id: return
@@ -1983,7 +2043,7 @@ class VisualNovelEditor(QMainWindow):
 
     # ASSETS LIBRARY OPERATIONS
     def refresh_assets_tab_lists(self):
-        self.is_updating_ui = True
+        self.block_ui_updates()
         
         # 1. Populate character list
         self.char_lib_list.clear()
@@ -2020,12 +2080,12 @@ class VisualNovelEditor(QMainWindow):
         self.selected_music_lib_name = None
         self.selected_sfx_lib_name = None
         
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def refresh_bg_combo_list(self):
         curr_selection = self.scene_bg_combo.currentText()
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         self.scene_bg_combo.clear()
         self.scene_bg_combo.addItem("[Вручную / Цвет]")
         
@@ -2036,12 +2096,12 @@ class VisualNovelEditor(QMainWindow):
         idx = self.scene_bg_combo.findText(curr_selection)
         if idx >= 0:
             self.scene_bg_combo.setCurrentIndex(idx)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
 
     def refresh_bgm_combo_list(self):
         curr_selection = self.scene_bgm_combo.currentText()
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         self.scene_bgm_combo.clear()
         self.scene_bgm_combo.addItem("[Без изменений]")
         self.scene_bgm_combo.addItem("[Остановить музыку]")
@@ -2054,12 +2114,12 @@ class VisualNovelEditor(QMainWindow):
         idx = self.scene_bgm_combo.findText(curr_selection)
         if idx >= 0:
             self.scene_bgm_combo.setCurrentIndex(idx)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
 
     def refresh_sfx_combo_list(self):
         curr_selection = self.diag_sfx_combo.currentText()
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         self.diag_sfx_combo.clear()
         self.diag_sfx_combo.addItem("[Без звука]")
         self.diag_sfx_combo.addItem("[Вручную / Путь к файлу]")
@@ -2071,7 +2131,7 @@ class VisualNovelEditor(QMainWindow):
         idx = self.diag_sfx_combo.findText(curr_selection)
         if idx >= 0:
             self.diag_sfx_combo.setCurrentIndex(idx)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
 
     # Character actions
     def add_character(self):
@@ -2110,7 +2170,7 @@ class VisualNovelEditor(QMainWindow):
         if index < 0 or self.is_updating_ui: return
         
         self.selected_char_id = list(self.project_data["config"]["characters"].keys())[index]
-        self.is_updating_ui = True
+        self.block_ui_updates()
         
         char_info = self.project_data["config"]["characters"][self.selected_char_id]
         self.char_name_input.setText(char_info.get("name", ""))
@@ -2126,7 +2186,7 @@ class VisualNovelEditor(QMainWindow):
         self.selected_char_sprite_idx = None
         
         self.char_props_panel.show()
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def char_field_changed(self):
         if self.is_updating_ui or not self.selected_char_id: return
@@ -2136,12 +2196,12 @@ class VisualNovelEditor(QMainWindow):
         char_info["color"] = self.char_color_input.text()
         
         # Update display item in list
-        self.is_updating_ui = True
+        self.block_ui_updates()
         curr_row = self.char_lib_list.currentRow()
         list_item = self.char_lib_list.item(curr_row)
         if list_item:
             list_item.setText(f"{char_info['name']} ({self.selected_char_id})")
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         self.refresh_scene_comboboxes()
         
     # Character Sprites actions
@@ -2158,9 +2218,9 @@ class VisualNovelEditor(QMainWindow):
             
         char_info["sprites"][expr_name] = ""
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         self.char_sprites_list.addItem(expr_name)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
         row = self.char_sprites_list.count() - 1
         self.char_sprites_list.setCurrentRow(row)
@@ -2176,27 +2236,27 @@ class VisualNovelEditor(QMainWindow):
             del char_info["sprites"][expr_name]
             self.selected_char_sprite_idx = None
             
-            self.is_updating_ui = True
+            self.block_ui_updates()
             self.char_sprites_list.clear()
             for expr in char_info.get("sprites", {}).keys():
                 self.char_sprites_list.addItem(expr)
             self.sprite_name_input.clear()
             self.sprite_path_input.clear()
-            self.is_updating_ui = False
+            self.unblock_ui_updates()
             self.refresh_scene_comboboxes()
             
     def char_sprite_selected(self, index):
         if index < 0 or self.is_updating_ui: return
         self.selected_char_sprite_idx = index
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         expr_name = self.char_sprites_list.item(index).text()
         char_info = self.project_data["config"]["characters"][self.selected_char_id]
         img_path = char_info["sprites"].get(expr_name, "")
         
         self.sprite_name_input.setText(expr_name)
         self.sprite_path_input.setText(img_path)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def char_sprite_field_changed(self):
         if self.is_updating_ui or not self.selected_char_id or self.selected_char_sprite_idx is None: return
@@ -2216,9 +2276,9 @@ class VisualNovelEditor(QMainWindow):
             
         char_info["sprites"][new_name] = img_path
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         self.char_sprites_list.item(self.selected_char_sprite_idx).setText(new_name)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         self.refresh_scene_comboboxes()
         
     def browse_char_sprite_path(self):
@@ -2261,12 +2321,12 @@ class VisualNovelEditor(QMainWindow):
         if index < 0 or self.is_updating_ui: return
         self.selected_bg_lib_name = list(self.project_data["config"]["backgrounds"].keys())[index]
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         bg_lib = self.project_data["config"].get("backgrounds", {})
         self.bg_name_input.setText(self.selected_bg_lib_name)
         self.bg_path_input.setText(bg_lib.get(self.selected_bg_lib_name, ""))
         self.bg_props_panel.show()
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def bg_lib_field_changed(self):
         if self.is_updating_ui or not self.selected_bg_lib_name: return
@@ -2287,12 +2347,12 @@ class VisualNovelEditor(QMainWindow):
             
         bg_lib[new_name] = bg_path
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         curr_row = self.bg_lib_list.currentRow()
         list_item = self.bg_lib_list.item(curr_row)
         if list_item:
             list_item.setText(new_name)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         self.refresh_bg_combo_list()
         
     def browse_bg_lib_path(self):
@@ -2335,12 +2395,12 @@ class VisualNovelEditor(QMainWindow):
         if index < 0 or self.is_updating_ui: return
         self.selected_music_lib_name = list(self.project_data["config"]["music"].keys())[index]
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         music_lib = self.project_data["config"].get("music", {})
         self.music_name_input.setText(self.selected_music_lib_name)
         self.music_path_input.setText(music_lib.get(self.selected_music_lib_name, ""))
         self.music_props_widget.show()
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def music_lib_field_changed(self):
         if self.is_updating_ui or not self.selected_music_lib_name: return
@@ -2361,12 +2421,12 @@ class VisualNovelEditor(QMainWindow):
             
         music_lib[new_name] = m_path
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         curr_row = self.music_lib_list.currentRow()
         list_item = self.music_lib_list.item(curr_row)
         if list_item:
             list_item.setText(new_name)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         self.refresh_bgm_combo_list()
         
     def browse_music_lib_path(self):
@@ -2409,12 +2469,12 @@ class VisualNovelEditor(QMainWindow):
         if index < 0 or self.is_updating_ui: return
         self.selected_sfx_lib_name = list(self.project_data["config"]["sfx"].keys())[index]
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         sfx_lib = self.project_data["config"].get("sfx", {})
         self.sfx_name_input.setText(self.selected_sfx_lib_name)
         self.sfx_path_input.setText(sfx_lib.get(self.selected_sfx_lib_name, ""))
         self.sfx_props_widget.show()
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         
     def sfx_lib_field_changed(self):
         if self.is_updating_ui or not self.selected_sfx_lib_name: return
@@ -2435,12 +2495,12 @@ class VisualNovelEditor(QMainWindow):
             
         sfx_lib[new_name] = s_path
         
-        self.is_updating_ui = True
+        self.block_ui_updates()
         curr_row = self.sfx_lib_list.currentRow()
         list_item = self.sfx_lib_list.item(curr_row)
         if list_item:
             list_item.setText(new_name)
-        self.is_updating_ui = False
+        self.unblock_ui_updates()
         self.refresh_sfx_combo_list()
         
     def browse_sfx_lib_path(self):
