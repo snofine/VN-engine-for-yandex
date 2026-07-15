@@ -4,12 +4,175 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Visual Novel</title>
+
+    <!-- SEO & Social Meta Tags -->
+    <meta name="description" content="Интерактивная визуальная новелла — захватывающая история с выборами, персонажами и музыкой. Играйте прямо в браузере!">
+    <meta name="theme-color" content="#0c0c0e">
+    <meta property="og:title" content="Visual Novel — Интерактивная История">
+    <meta property="og:type" content="website">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Favicon — inline SVG play triangle -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='25,10 25,90 85,50' fill='%23ffcc00'/></svg>" type="image/svg+xml">
+
     <!-- Yandex Games SDK -->
     <script src="https://yandex.ru/games/sdk/v2"></script>
+
     <!-- Styles -->
     <link rel="stylesheet" href="style.css">
+
+    <!-- Preloader & Splash Screen Styles -->
+    <style>
+        /* ── Preloader / Splash Screen ── */
+        #preloader {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            background: #0c0c0e;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.6s ease, visibility 0.6s ease;
+        }
+        #preloader.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        #preloader .splash-title {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 32px;
+            font-weight: 900;
+            color: #fff;
+            margin-bottom: 32px;
+            background: linear-gradient(135deg, #fff 30%, #ffcc00);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+        }
+        #preloader .splash-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 204, 0, 0.2);
+            border-top-color: #ffcc00;
+            border-radius: 50%;
+            animation: preloader-spin 0.8s linear infinite;
+        }
+        @keyframes preloader-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Pause Overlay Spinner ── */
+        .pause-spinner {
+            width: 36px;
+            height: 36px;
+            margin-top: 16px;
+            border: 3px solid rgba(255, 255, 255, 0.15);
+            border-top-color: #ffcc00;
+            border-radius: 50%;
+            animation: pause-spin 1s linear infinite;
+        }
+        @keyframes pause-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Volume Slider (HUD) ── */
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .volume-label {
+            font-size: 16px;
+            line-height: 1;
+            cursor: default;
+        }
+        .volume-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 70px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #ffcc00;
+            cursor: pointer;
+            box-shadow: 0 0 4px rgba(255, 204, 0, 0.5);
+        }
+        .volume-slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #ffcc00;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 0 4px rgba(255, 204, 0, 0.5);
+        }
+
+        /* ── Noscript Fallback ── */
+        .noscript-warning {
+            position: fixed;
+            inset: 0;
+            z-index: 999999;
+            background: #0c0c0e;
+            color: #f3f3f7;
+            font-family: system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 40px;
+        }
+        .noscript-warning h1 {
+            font-size: 28px;
+            margin-bottom: 16px;
+            color: #ffcc00;
+        }
+        .noscript-warning p {
+            font-size: 16px;
+            color: #a0a0ab;
+            max-width: 400px;
+            line-height: 1.6;
+        }
+    </style>
 </head>
 <body>
+    <!-- ══════════════════════════════════════════
+         Noscript Fallback
+         ══════════════════════════════════════════ -->
+    <noscript>
+        <div class="noscript-warning">
+            <h1>⚠️ JavaScript отключён</h1>
+            <p>
+                Для работы визуальной новеллы необходим JavaScript.
+                Пожалуйста, включите JavaScript в настройках вашего браузера и перезагрузите страницу.
+            </p>
+        </div>
+    </noscript>
+
+    <!-- ══════════════════════════════════════════
+         Preloader / Splash Screen
+         ══════════════════════════════════════════ -->
+    <div id="preloader">
+        <div class="splash-title" id="splash-title-text">Загрузка…</div>
+        <div class="splash-spinner"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         Game Container
+         ══════════════════════════════════════════ -->
     <div id="game-container">
         <!-- Game background image -->
         <div id="bg-layer"></div>
@@ -24,10 +187,23 @@
         <!-- Header Panel with HUD buttons -->
         <div id="header-panel">
             <div id="game-title">Новелла</div>
-            <div style="display: flex; gap: 10px;">
+            <div style="display: flex; gap: 10px; align-items: center;">
                 <button id="remove-ads-btn" class="hud-btn" style="display: none;" onclick="purchaseAdsRemoval()">
                     💎 Отключить рекламу
                 </button>
+                <!-- Volume Control -->
+                <div class="volume-control">
+                    <span class="volume-label" title="Громкость">🔊</span>
+                    <input type="range" id="volume-slider" min="0" max="100" value="100" class="volume-slider" title="Громкость">
+                </div>
+                <!-- Save / Load Buttons -->
+                <button id="save-btn" class="hud-btn" onclick="saveGame()" title="Сохранить прогресс">
+                    💾 Сохранить
+                </button>
+                <button id="load-btn" class="hud-btn" onclick="loadGame()" title="Загрузить сохранение">
+                    📂 Загрузить
+                </button>
+                <!-- Restart Button -->
                 <button id="reset-btn" class="hud-btn" onclick="restartGame()">
                     🔄 С начала
                 </button>
@@ -51,6 +227,7 @@
             <h1 class="menu-title" id="menu-title-text">Моя Новелла</h1>
             <div class="menu-buttons">
                 <button class="menu-btn primary" onclick="startGame()">Начать игру</button>
+                <button id="menu-continue-btn" class="menu-btn" style="display: none;" onclick="loadGame()">📂 Продолжить</button>
                 <button id="menu-remove-ads-btn" class="menu-btn" style="display: none;" onclick="purchaseAdsRemoval()">💎 Без рекламы 30 руб.</button>
             </div>
         </div>
@@ -59,12 +236,35 @@
         <div id="pause-overlay">
             <h2 style="font-size: 28px; color: #fff; margin-bottom: 10px;">Пауза</h2>
             <p style="font-size: 16px; color: #aaa;">Реклама...</p>
+            <div class="pause-spinner"></div>
         </div>
     </div>
 
-    <!-- Scripts -->
+    <!-- ══════════════════════════════════════════
+         Scripts
+         ══════════════════════════════════════════ -->
     <script src="story.js"></script>
     <script src="yandex_sdk.js"></script>
     <script src="game.js"></script>
+
+    <!-- Preloader dismiss (fires after all scripts have parsed) -->
+    <script>
+        window.addEventListener('load', function () {
+            // Update splash title with game title if available
+            var splashTitle = document.getElementById('splash-title-text');
+            if (window.storyData && window.storyData.config && window.storyData.config.title) {
+                splashTitle.textContent = window.storyData.config.title;
+            }
+            // Fade out the preloader
+            var preloader = document.getElementById('preloader');
+            if (preloader) {
+                preloader.classList.add('hidden');
+                // Remove from DOM after transition
+                preloader.addEventListener('transitionend', function () {
+                    preloader.remove();
+                });
+            }
+        });
+    </script>
 </body>
 </html>

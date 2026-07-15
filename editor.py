@@ -261,6 +261,7 @@ class VisualNovelEditor(QMainWindow):
         # Signal blocking/reentrancy tracking
         self.ui_update_nesting = 0
         self.is_updating_ui = False
+        self.is_dirty = False  # Track unsaved changes
         
         self.init_ui()
         self.new_project() # Initialize with a clean project
@@ -274,6 +275,40 @@ class VisualNovelEditor(QMainWindow):
         if self.ui_update_nesting <= 0:
             self.ui_update_nesting = 0
             self.is_updating_ui = False
+
+    def mark_dirty(self):
+        """Mark project as having unsaved changes."""
+        if not self.is_updating_ui:
+            self.is_dirty = True
+            title = self.windowTitle()
+            if not title.startswith("● "):
+                self.setWindowTitle("● " + title)
+
+    def mark_clean(self):
+        """Mark project as saved."""
+        self.is_dirty = False
+        title = self.windowTitle()
+        if title.startswith("● "):
+            self.setWindowTitle(title[2:])
+
+    def closeEvent(self, event):
+        """Warn user about unsaved changes before closing."""
+        if self.is_dirty:
+            reply = QMessageBox.question(
+                self, "Несохранённые изменения",
+                "В проекте есть несохранённые изменения.\nСохранить перед выходом?",
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Save
+            )
+            if reply == QMessageBox.Save:
+                self.save_project()
+                event.accept()
+            elif reply == QMessageBox.Discard:
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.accept()
 
     def init_ui(self):
         # 1. Menu bar & ToolBar
@@ -979,7 +1014,7 @@ class VisualNovelEditor(QMainWindow):
         
         export_dir_layout = QHBoxLayout()
         self.export_dir_input = QLineEdit()
-        self.export_dir_input.setText("F:\\myvn\\export")
+        self.export_dir_input.setText(os.path.join(os.getcwd(), "export"))
         export_dir_layout.addWidget(self.export_dir_input)
         
         export_dir_browse = QPushButton("Обзор...")
@@ -1010,7 +1045,7 @@ class VisualNovelEditor(QMainWindow):
                 "start_scene": "scene_1",
                 "ads_interval_minutes": 3,
                 "inapp_remove_ads_id": "no_ads_30rub",
-                "export_dir": "F:\\myvn\\export",
+                "export_dir": os.path.join(os.getcwd(), "export"),
                 "gui_profile": "Дефолтный",
                 "characters": {
                     "alisa": {
@@ -1053,10 +1088,11 @@ class VisualNovelEditor(QMainWindow):
         }
         self.refresh_all_ui()
         self.scene_list.setCurrentRow(0)
+        self.mark_clean()
         
     def open_project(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Открыть файл проекта myvn", "F:\\myvn", "Проект myvn (*.json)"
+            self, "Открыть файл проекта myvn", os.getcwd(), "Проект myvn (*.json)"
         )
         if not file_path:
             return
@@ -1090,6 +1126,7 @@ class VisualNovelEditor(QMainWindow):
                 self.scene_list.setCurrentRow(0)
                 
             QMessageBox.information(self, "Открыто", "Проект успешно загружен.")
+            self.mark_clean()
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось открыть файл проекта:\n{str(e)}")
             
@@ -1102,13 +1139,14 @@ class VisualNovelEditor(QMainWindow):
                 with open(self.project_path, "w", encoding="utf-8") as f:
                     json.dump(self.project_data, f, indent=4, ensure_ascii=False)
                 self.statusBar().showMessage(f"Проект сохранен в: {self.project_path}", 3000)
+                self.mark_clean()
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить проект:\n{str(e)}")
                 
     def save_project_as(self):
         self.sync_config_from_ui()
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить проект как", "F:\\myvn", "Проект myvn (*.json)"
+            self, "Сохранить проект как", os.getcwd(), "Проект myvn (*.json)"
         )
         if not file_path:
             return
@@ -1176,7 +1214,7 @@ class VisualNovelEditor(QMainWindow):
         # Config inputs
         config = self.project_data.get("config", {})
         self.proj_title_input.setText(config.get("title", "Моя Новелла"))
-        self.export_dir_input.setText(config.get("export_dir", "F:\\myvn\\export"))
+        self.export_dir_input.setText(config.get("export_dir", os.path.join(os.getcwd(), "export")))
         
         ads_interval = config.get("ads_interval_minutes", 3)
         if ads_interval > 0:

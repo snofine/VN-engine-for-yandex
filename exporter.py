@@ -20,22 +20,48 @@ def export_project(project_data, export_dir):
 
         exported_data = json.loads(json.dumps(project_data)) # deep copy
         assets_to_copy = [] # list of (source_path, dest_filename)
+        used_dest_names = {} # filename -> counter to avoid collisions
+
+        # Common CSS named colors to avoid treating as file paths
+        CSS_NAMED_COLORS = {
+            "red", "blue", "green", "black", "white", "gray", "grey", "yellow",
+            "orange", "purple", "pink", "cyan", "magenta", "lime", "navy",
+            "teal", "aqua", "maroon", "olive", "silver", "fuchsia",
+            "transparent", "inherit", "initial", "unset", "currentcolor"
+        }
 
         def process_asset_path(url_or_path):
             if not url_or_path:
                 return url_or_path
-            # If it's a web URL or color, leave it as is
-            if url_or_path.startswith("http://") or url_or_path.startswith("https://") or url_or_path.startswith("data:"):
+            # If it's a web URL or data URI, leave it as is
+            if url_or_path.startswith(("http://", "https://", "data:", "file://")):
                 return url_or_path
-            # Check if it looks like a hex color
-            if url_or_path.startswith("#") or url_or_path.startswith("rgba") or url_or_path.startswith("rgb"):
+            # Check if it looks like a CSS color value
+            stripped = url_or_path.strip().lower()
+            if stripped.startswith(("#", "rgba", "rgb", "hsl", "hsla")):
+                return url_or_path
+            if stripped in CSS_NAMED_COLORS:
                 return url_or_path
             # If it's a file path, we copy it to assets/ and use relative path
             if os.path.exists(url_or_path):
                 filename = os.path.basename(url_or_path)
+                # Handle filename collisions by appending a unique suffix
+                if filename in used_dest_names:
+                    # Check if we already mapped this exact source file
+                    for src, dst in assets_to_copy:
+                        if os.path.abspath(src) == os.path.abspath(url_or_path):
+                            return f"assets/{os.path.basename(dst)}"
+                    # Different source file with same name — create unique name
+                    used_dest_names[filename] += 1
+                    name, ext = os.path.splitext(filename)
+                    filename = f"{name}_{used_dest_names[filename]}{ext}"
+                else:
+                    used_dest_names[filename] = 0
                 dest_path = os.path.join(assets_dest_dir, filename)
                 assets_to_copy.append((url_or_path, dest_path))
                 return f"assets/{filename}"
+            else:
+                print(f"⚠ Ассет не найден на диске: {url_or_path}")
             return url_or_path
 
         # 1. Process backgrounds library assets

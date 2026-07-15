@@ -6,23 +6,23 @@
     --panel-border: rgba(255, 255, 255, 0.1);
     --panel-radius: 12px;
     --dialogue-height: 180px;
-    
+
     --text-color: #f3f3f7;
     --text-muted: #a0a0ab;
     --text-size: 18px;
-    
+
     --name-color: #ffcc00;
     --name-size: 20px;
     --name-bold: bold;
-    
+
     --choice-bg: rgba(18, 18, 24, 0.9);
     --choice-hover-bg: #1e1e24;
     --choice-border-color: rgba(255, 255, 255, 0.15);
     --choice-text-color: #f3f3f7;
     --choice-size: 16px;
-    
+
     --font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    
+
     /* Internal variables */
     --primary-color: var(--name-color);
     --primary-glow: rgba(255, 204, 0, 0.4);
@@ -49,7 +49,9 @@ body {
     align-items: center;
 }
 
-/* Fullscreen Game Container */
+/* ============================================================
+   Fullscreen Game Container
+   ============================================================ */
 #game-container {
     position: relative;
     width: 1280px;
@@ -63,7 +65,23 @@ body {
     transform-origin: top left;
 }
 
-/* Background Layer */
+/* Cinematic vignette overlay */
+#game-container::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+        ellipse at center,
+        transparent 55%,
+        rgba(0, 0, 0, 0.45) 100%
+    );
+    pointer-events: none;
+    z-index: 999;
+}
+
+/* ============================================================
+   Background Layer
+   ============================================================ */
 #bg-layer {
     position: absolute;
     top: 0;
@@ -90,7 +108,9 @@ body {
     opacity: 0;
 }
 
-/* Character Sprites Layer */
+/* ============================================================
+   Character Sprites Layer
+   ============================================================ */
 #sprites-layer {
     position: absolute;
     bottom: 0;
@@ -127,7 +147,9 @@ body {
     left: 75%;
 }
 
-/* Dialogue Box Panel (Bottom) */
+/* ============================================================
+   Dialogue Box Panel (Bottom)
+   ============================================================ */
 #ui-layer {
     position: absolute;
     bottom: 0;
@@ -158,37 +180,85 @@ body {
     pointer-events: auto;
     position: relative;
     box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.4);
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, opacity 0.4s ease, transform 0.4s ease;
+    /* Fade-in animation on first appearance */
+    animation: dialoguePanelIn 0.5s ease-out both;
 }
 
 #dialogue-panel:hover {
     border-color: rgba(255, 255, 255, 0.2);
 }
 
+@keyframes dialoguePanelIn {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Speaker name – smooth colour transition */
 #speaker-name {
     font-size: var(--name-size);
     font-weight: var(--name-bold);
     color: var(--name-color);
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    transition: color 0.35s ease;
 }
 
+/* Dialogue text – subtle text-shadow for readability over bright BGs */
 #dialogue-text {
     font-size: var(--text-size);
     line-height: 1.6;
     color: var(--text-color);
     overflow-y: auto;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 8px rgba(0, 0, 0, 0.25);
 }
 
+/* Typewriter cursor blink – added via JS by toggling .typewriter-active */
+#dialogue-text.typewriter-active::after {
+    content: "▎";
+    display: inline;
+    animation: cursorBlink 0.6s steps(2) infinite;
+    color: var(--text-muted);
+    margin-left: 1px;
+}
+
+@keyframes cursorBlink {
+    0%   { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Next indicator – gentle pulsing glow instead of plain bounce */
 #next-indicator {
     position: absolute;
     bottom: 15px;
     right: 25px;
     font-size: 14px;
-    color: var(--text-muted);
-    animation: bounce 1s infinite alternate;
+    color: var(--primary-color);
+    animation: pulseGlow 1.6s ease-in-out infinite;
+    text-shadow: 0 0 6px var(--primary-glow);
 }
 
-/* Choices Panel (Center) */
+@keyframes pulseGlow {
+    0%, 100% {
+        opacity: 0.6;
+        text-shadow: 0 0 4px var(--primary-glow);
+        transform: translateY(0);
+    }
+    50% {
+        opacity: 1;
+        text-shadow: 0 0 14px var(--primary-glow), 0 0 24px var(--primary-glow);
+        transform: translateY(-3px);
+    }
+}
+
+/* ============================================================
+   Choices Panel (Center)
+   ============================================================ */
 #choices-panel {
     position: absolute;
     top: 45%;
@@ -214,6 +284,30 @@ body {
     text-align: center;
     transition: all 0.2s ease;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    /* Stagger fade-in – nth-child delay set via custom property */
+    animation: choiceFadeIn 0.4s ease-out both;
+    animation-delay: var(--choice-delay, 0s);
+}
+
+/* Stagger delays for up to 8 choices */
+.choice-btn:nth-child(1) { --choice-delay: 0.05s; }
+.choice-btn:nth-child(2) { --choice-delay: 0.12s; }
+.choice-btn:nth-child(3) { --choice-delay: 0.19s; }
+.choice-btn:nth-child(4) { --choice-delay: 0.26s; }
+.choice-btn:nth-child(5) { --choice-delay: 0.33s; }
+.choice-btn:nth-child(6) { --choice-delay: 0.40s; }
+.choice-btn:nth-child(7) { --choice-delay: 0.47s; }
+.choice-btn:nth-child(8) { --choice-delay: 0.54s; }
+
+@keyframes choiceFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .choice-btn:hover {
@@ -223,7 +317,9 @@ body {
     transform: translateY(-2px);
 }
 
-/* Header Panel (Settings & In-App) */
+/* ============================================================
+   Header Panel (Settings & In-App)
+   ============================================================ */
 #header-panel {
     position: absolute;
     top: 20px;
@@ -277,20 +373,30 @@ body {
     transform: scale(1.05);
 }
 
-/* Menu / Cover Screen */
+/* ============================================================
+   Menu / Cover Screen  – dramatic slow-moving gradient
+   ============================================================ */
 #menu-screen {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: var(--bg-dark);
+    background: linear-gradient(135deg, #0c0c0e 0%, #1a1028 25%, #0d1b2a 50%, #0c0c0e 75%, #1a1028 100%);
+    background-size: 400% 400%;
+    animation: menuGradientShift 12s ease infinite;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     z-index: 10;
     transition: opacity 0.5s ease-in-out;
+}
+
+@keyframes menuGradientShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
 .menu-title {
@@ -302,7 +408,21 @@ body {
     background: linear-gradient(135deg, #fff 30%, var(--primary-color));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    /* text-shadow has no visible effect on clipped text but kept for
+       browsers that don't support background-clip */
     text-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    animation: menuTitleIn 1s ease-out both;
+}
+
+@keyframes menuTitleIn {
+    from {
+        opacity: 0;
+        transform: translateY(-16px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .menu-buttons {
@@ -339,30 +459,153 @@ body {
 
 .menu-btn.primary:hover {
     box-shadow: 0 0 25px rgba(255, 204, 0, 0.6);
+    transform: scale(1.08);
 }
 
-/* Animations */
-@keyframes bounce {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(-5px); }
+/* ============================================================
+   End Screen – "Конец Истории"
+   ============================================================ */
+#end-screen,
+.end-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.85);
+    animation: endScreenIn 1s ease-out both;
+    text-align: center;
+    gap: 24px;
 }
 
-/* Overlay for pause or advertisements */
+#end-screen h1,
+.end-screen h1,
+#end-screen .end-title,
+.end-screen .end-title {
+    font-size: 42px;
+    font-weight: 900;
+    background: linear-gradient(135deg, #fff 20%, var(--primary-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: endTitlePulse 3s ease-in-out infinite;
+}
+
+#end-screen p,
+.end-screen p,
+#end-screen .end-subtitle,
+.end-screen .end-subtitle {
+    font-size: 18px;
+    color: var(--text-muted);
+    animation: endScreenIn 1.4s ease-out both;
+}
+
+@keyframes endScreenIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes endTitlePulse {
+    0%, 100% { filter: brightness(1); }
+    50%      { filter: brightness(1.2); }
+}
+
+/* ============================================================
+   Loading / Splash State
+   ============================================================ */
+#loading-screen,
+.loading-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
+    z-index: 1000;
+    background-color: var(--bg-dark);
+    animation: loadingFadeOut 0.5s ease-out 0.2s both paused; /* triggered by .ready */
+}
+
+#loading-screen.ready,
+.loading-screen.ready {
+    animation-play-state: running;
+    pointer-events: none;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.loading-text {
+    font-size: 14px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes loadingFadeOut {
+    to {
+        opacity: 0;
+        visibility: hidden;
+    }
+}
+
+/* ============================================================
+   Pause Overlay – blur backdrop
+   ============================================================ */
 #pause-overlay {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     display: none;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     z-index: 100;
+    animation: overlayIn 0.3s ease-out both;
 }
 
-/* Scrollbar styling */
+#pause-overlay[style*="display: flex"],
+#pause-overlay.visible {
+    animation: overlayIn 0.3s ease-out both;
+}
+
+@keyframes overlayIn {
+    from {
+        opacity: 0;
+        backdrop-filter: blur(0px);
+    }
+    to {
+        opacity: 1;
+        backdrop-filter: blur(10px);
+    }
+}
+
+/* ============================================================
+   Scrollbar – Webkit + Firefox
+   ============================================================ */
 #dialogue-text::-webkit-scrollbar {
     width: 6px;
 }
@@ -372,4 +615,18 @@ body {
 #dialogue-text::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 3px;
+}
+
+/* Firefox scrollbar */
+#dialogue-text {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+/* ============================================================
+   Legacy bounce keyframe kept for any external references
+   ============================================================ */
+@keyframes bounce {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(-5px); }
 }

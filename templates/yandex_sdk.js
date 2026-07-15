@@ -75,7 +75,6 @@ function showFullscreenAd() {
     }
     
     console.log("Requesting Fullscreen Ad...");
-    if (onAdOpenCallback) onAdOpenCallback();
     
     if (ysdk) {
         ysdk.adv.showFullscreenAdv({
@@ -86,7 +85,7 @@ function showFullscreenAd() {
                 },
                 onClose: (wasShown) => {
                     console.log("Ad closed. Was shown:", wasShown);
-                    if (onAdCloseCallback) onAdCloseCallback(true);
+                    if (onAdCloseCallback) onAdCloseCallback(wasShown);
                 },
                 onError: (error) => {
                     console.error("Ad error:", error);
@@ -101,6 +100,7 @@ function showFullscreenAd() {
     } else {
         // Mock ad behavior for local testing
         console.log("[Mock Ad] Displaying full screen ad simulator for 3 seconds...");
+        if (onAdOpenCallback) onAdOpenCallback();
         createMockAdOverlay();
     }
 }

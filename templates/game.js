@@ -1,4 +1,4 @@
-// game.js - Core Visual Novel Engine Player
+// game.js - Core Visual Novel Engine Player (Polished)
 let currentSceneId = "";
 let currentDialogueIndex = 0;
 let isMenuVisible = true;
@@ -8,6 +8,7 @@ let isGamePaused = false;
 let isMuted = false;
 let bgmAudio = null;
 let currentBgmPath = "";
+let bgmVolume = 1.0;
 
 // Monetization & Ad Timer variables
 let lastAdTime = Date.now();
@@ -15,11 +16,42 @@ let adIntervalMs = 3 * 60 * 1000; // Default 3 minutes
 let adsEnabled = false;
 let removeAdsId = "";
 
+// Typewriter effect state
+let typewriterTimer = null;
+let typewriterFullHTML = "";
+let isTypewriterActive = false;
+const TYPEWRITER_SPEED = 30; // ms per character
+
 // Initialize game on window load
 window.addEventListener('DOMContentLoaded', () => {
     initEngine();
     window.addEventListener('resize', autoScaleGame);
+    
+    // Keyboard support
+    window.addEventListener('keydown', handleKeyPress);
 });
+
+// Keyboard handler
+function handleKeyPress(e) {
+    if (isMenuVisible || isGamePaused) return;
+    
+    if (e.code === 'Space' || e.code === 'Enter') {
+        e.preventDefault();
+        onDialogueClick();
+    }
+    
+    // Number keys 1-9 to select choices
+    if (e.code.startsWith('Digit') && e.code !== 'Digit0') {
+        const choicesPanel = document.getElementById('choices-panel');
+        if (choicesPanel && choicesPanel.style.display !== 'none') {
+            const num = parseInt(e.code.replace('Digit', ''));
+            const buttons = choicesPanel.querySelectorAll('.choice-btn');
+            if (num <= buttons.length) {
+                buttons[num - 1].click();
+            }
+        }
+    }
+}
 
 // Initialize Engine
 async function initEngine() {
@@ -74,6 +106,15 @@ async function initEngine() {
         if (gui.font_family) root.style.setProperty('--font-family', gui.font_family);
     }
 
+    // Volume slider setup
+    const volumeSlider = document.getElementById('volume-slider');
+    if (volumeSlider) {
+        volumeSlider.addEventListener('input', (e) => {
+            bgmVolume = parseInt(e.target.value) / 100;
+            if (bgmAudio) bgmAudio.volume = bgmVolume;
+        });
+    }
+
     // Scale the game screen
     autoScaleGame();
 
@@ -110,8 +151,24 @@ async function initEngine() {
         if (menuAdsBtn) menuAdsBtn.style.display = 'block';
     }
 
-    // Start checking for ads interval
-    startAdTimer();
+    // Hide loading screen
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+        loadingScreen.classList.add('ready');
+        setTimeout(() => { loadingScreen.style.display = 'none'; }, 600);
+    }
+
+    // Check if there's a saved game
+    if (hasSavedGame()) {
+        const menuBtns = document.querySelector('.menu-buttons');
+        if (menuBtns) {
+            const continueBtn = document.createElement('button');
+            continueBtn.className = 'menu-btn';
+            continueBtn.innerText = '▶ Продолжить';
+            continueBtn.onclick = () => loadGameState();
+            menuBtns.insertBefore(continueBtn, menuBtns.firstChild);
+        }
+    }
 }
 
 // Start visual novel
@@ -124,22 +181,26 @@ function startGame() {
     }, 500);
 
     const config = window.storyData.config || {};
-    const startScene = config.start_scene || Object.keys(window.storyData.scenes)[0];
-    loadScene(startScene);
+    const startScene = config.start_scene || Object.keys(window.storyData.scenes || {})[0];
+    if (startScene) {
+        loadScene(startScene);
+    } else {
+        console.error("No scenes found in story data.");
+    }
 }
 
 // Restart game
 function restartGame() {
-    const confirmRestart = confirm("Вы уверены, что хотите начать заново?");
-    if (confirmRestart) {
-        isMenuVisible = false;
-        const menuScreen = document.getElementById('menu-screen');
-        menuScreen.style.display = 'none';
-        
-        const config = window.storyData.config || {};
-        const startScene = config.start_scene || Object.keys(window.storyData.scenes)[0];
-        loadScene(startScene);
-    }
+    if (!confirm("Вы уверены, что хотите начать заново?")) return;
+    
+    clearSavedGame();
+    isMenuVisible = false;
+    const menuScreen = document.getElementById('menu-screen');
+    menuScreen.style.display = 'none';
+    
+    const config = window.storyData.config || {};
+    const startScene = config.start_scene || Object.keys(window.storyData.scenes || {})[0];
+    if (startScene) loadScene(startScene);
 }
 
 // Load a specific scene by ID
@@ -189,25 +250,32 @@ function loadScene(sceneId) {
         updateBgGraphic();
     }
 
-    // 2. Play Background Music (BGM)
+    // 2. Play Background Music (BGM) with crossfade
     if (scene.bgm) {
         if (scene.bgm === 'stop') {
-            if (bgmAudio) {
-                bgmAudio.pause();
-                bgmAudio = null;
-            }
+            fadeOutBGM();
             currentBgmPath = "";
         } else if (scene.bgm !== currentBgmPath) {
-            if (bgmAudio) {
-                bgmAudio.pause();
-            }
-            currentBgmPath = scene.bgm;
-            bgmAudio = new Audio(scene.bgm);
-            bgmAudio.loop = true;
-            bgmAudio.muted = isMuted;
-            bgmAudio.play().catch(e => console.log("BGM playback blocked or deferred until interaction:", e));
+            fadeOutBGM(() => {
+                currentBgmPath = scene.bgm;
+                bgmAudio = new Audio(scene.bgm);
+                bgmAudio.loop = true;
+                bgmAudio.volume = 0;
+                bgmAudio.muted = isMuted;
+                bgmAudio.play().catch(e => console.log("BGM playback blocked:", e));
+                fadeInBGM();
+            });
         }
     }
+
+    // Clear all sprites for fresh scene
+    ['sprite-left', 'sprite-center', 'sprite-right'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove('active');
+            setTimeout(() => { el.src = ''; }, 300);
+        }
+    });
 
     // Hide choices at start of scene
     const choicesPanel = document.getElementById('choices-panel');
@@ -220,14 +288,51 @@ function loadScene(sceneId) {
 
     // Present first dialogue step
     renderDialogueStep();
+    
+    // Auto-save progress
+    saveGameState();
+}
+
+// BGM crossfade helpers
+function fadeOutBGM(onComplete) {
+    if (!bgmAudio) {
+        if (onComplete) onComplete();
+        return;
+    }
+    const fadeStep = 0.05;
+    const fadeInterval = setInterval(() => {
+        if (bgmAudio && bgmAudio.volume > fadeStep) {
+            bgmAudio.volume = Math.max(0, bgmAudio.volume - fadeStep);
+        } else {
+            clearInterval(fadeInterval);
+            if (bgmAudio) {
+                bgmAudio.pause();
+                bgmAudio = null;
+            }
+            if (onComplete) onComplete();
+        }
+    }, 30);
+}
+
+function fadeInBGM() {
+    if (!bgmAudio) return;
+    const targetVolume = bgmVolume;
+    const fadeStep = 0.05;
+    const fadeInterval = setInterval(() => {
+        if (bgmAudio && bgmAudio.volume < targetVolume - fadeStep) {
+            bgmAudio.volume = Math.min(targetVolume, bgmAudio.volume + fadeStep);
+        } else {
+            clearInterval(fadeInterval);
+            if (bgmAudio) bgmAudio.volume = targetVolume;
+        }
+    }, 30);
 }
 
 // Parse slash tags and format dialogue text dynamically
 function parseDialogueText(text) {
     if (!text) return "";
     
-    // Escape standard HTML tags to prevent arbitrary code execution,
-    // while keeping our custom formatting tags intact
+    // Escape standard HTML tags to prevent arbitrary code execution
     let escaped = text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -235,30 +340,152 @@ function parseDialogueText(text) {
         
     // Replace slash tags:
     // /b/text/b/ -> <b>text</b>
-    escaped = escaped.replace(/\/b\/(.*?)\/b\//g, "<b>$1</b>");
+    escaped = escaped.replace(/\/b\/(.*?)\/b\//gs, "<b>$1</b>");
     
     // /i/text/i/ -> <i>text</i>
-    escaped = escaped.replace(/\/i\/(.*?)\/i\//g, "<i>$1</i>");
+    escaped = escaped.replace(/\/i\/(.*?)\/i\//gs, "<i>$1</i>");
     
     // /u/text/u/ -> <u>text</u>
-    escaped = escaped.replace(/\/u\/(.*?)\/u\//g, "<u>$1</u>");
+    escaped = escaped.replace(/\/u\/(.*?)\/u\//gs, "<u>$1</u>");
+    
+    // /s/text/s/ -> <s>text</s> (strikethrough)
+    escaped = escaped.replace(/\/s\/(.*?)\/s\//gs, "<s>$1</s>");
+    
+    // /shake/text/shake/ -> <span class="shake-text">text</span>
+    escaped = escaped.replace(/\/shake\/(.*?)\/shake\//gs, '<span class="shake-text">$1</span>');
 
-    // /color=name_or_hex/text/color/ -> <span style="color: $1">$2</span>
-    escaped = escaped.replace(/\/color=(.*?)\/(.*?)\/color\//g, '<span style="color: $1">$2</span>');
+    // /color=value/text/color/ -> <span style="color: value">text</span>
+    // Validate color value to prevent CSS injection
+    escaped = escaped.replace(/\/color=([\w#]+)\/(.*?)\/color\//gs, '<span style="color: $1">$2</span>');
     
     return escaped;
+}
+
+// Typewriter effect: reveal text character by character
+function startTypewriter(element, html) {
+    stopTypewriter();
+    typewriterFullHTML = html;
+    isTypewriterActive = true;
+    element.classList.add('typewriter-active');
+    
+    // Parse HTML to extract plain text length for timing
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    const plainText = temp.textContent || temp.innerText;
+    const totalChars = plainText.length;
+    
+    if (totalChars === 0) {
+        element.innerHTML = html;
+        isTypewriterActive = false;
+        element.classList.remove('typewriter-active');
+        return;
+    }
+    
+    let charIndex = 0;
+    
+    // We reveal by wrapping content in a span and using CSS to clip
+    // Simpler approach: add chars one by one from plain text while preserving tags
+    element.innerHTML = '';
+    
+    typewriterTimer = setInterval(() => {
+        charIndex++;
+        if (charIndex >= totalChars) {
+            clearInterval(typewriterTimer);
+            typewriterTimer = null;
+            element.innerHTML = html;
+            isTypewriterActive = false;
+            element.classList.remove('typewriter-active');
+        } else {
+            // Show partial text by truncating plain text and re-applying tags
+            element.innerHTML = truncateHTMLByChars(html, charIndex);
+        }
+    }, TYPEWRITER_SPEED);
+}
+
+// Truncate HTML string to show only N visible characters
+function truncateHTMLByChars(html, maxChars) {
+    let result = '';
+    let visibleCount = 0;
+    let inTag = false;
+    let tagBuffer = '';
+    const openTags = [];
+    
+    for (let i = 0; i < html.length; i++) {
+        const ch = html[i];
+        
+        if (ch === '<') {
+            inTag = true;
+            tagBuffer = '<';
+            continue;
+        }
+        
+        if (inTag) {
+            tagBuffer += ch;
+            if (ch === '>') {
+                inTag = false;
+                result += tagBuffer;
+                // Track open/close tags
+                const closingMatch = tagBuffer.match(/^<\/(\w+)>/);
+                const openMatch = tagBuffer.match(/^<(\w+)/);
+                if (closingMatch && openTags.length > 0 && openTags[openTags.length - 1] === closingMatch[1]) {
+                    openTags.pop();
+                } else if (openMatch && !tagBuffer.match(/\/\s*>$/) && !closingMatch) {
+                    openTags.push(openMatch[1]);
+                }
+                tagBuffer = '';
+            }
+            continue;
+        }
+        
+        if (visibleCount < maxChars) {
+            result += ch;
+            visibleCount++;
+        } else {
+            break;
+        }
+    }
+    
+    // Close any open tags
+    for (let j = openTags.length - 1; j >= 0; j--) {
+        result += `</${openTags[j]}>`;
+    }
+    
+    return result;
+}
+
+function stopTypewriter() {
+    if (typewriterTimer) {
+        clearInterval(typewriterTimer);
+        typewriterTimer = null;
+    }
+    isTypewriterActive = false;
+    const textEl = document.getElementById('dialogue-text');
+    if (textEl) textEl.classList.remove('typewriter-active');
+}
+
+function skipTypewriter() {
+    if (isTypewriterActive) {
+        stopTypewriter();
+        const textEl = document.getElementById('dialogue-text');
+        if (textEl) textEl.innerHTML = typewriterFullHTML;
+        return true; // Indicate we consumed the click
+    }
+    return false;
 }
 
 // Render dialogue step
 function renderDialogueStep() {
     const scene = window.storyData.scenes[currentSceneId];
     if (!scene || !scene.dialogues || scene.dialogues.length === 0) {
-        // No dialogues, check if choices or jump
         showSceneEndOptions();
         return;
     }
 
     const step = scene.dialogues[currentDialogueIndex];
+    if (!step) {
+        showSceneEndOptions();
+        return;
+    }
     
     // Play sound effect (SFX) if specified in dialogue step
     if (step.sfx) {
@@ -276,11 +503,13 @@ function renderDialogueStep() {
     textEl.style.fontStyle = 'normal';
     textEl.style.fontWeight = 'normal';
 
+    let formattedText = '';
+
     if (step.is_thought) {
         // Thought: Hide speaker name, format text in parentheses & italics
         speakerEl.style.display = 'none';
         speakerEl.innerText = "";
-        textEl.innerHTML = `(${parseDialogueText(step.text || "")})`;
+        formattedText = `(${parseDialogueText(step.text || "")})`;
         textEl.style.fontStyle = 'italic';
     } else {
         // Standard Dialogue
@@ -300,7 +529,7 @@ function renderDialogueStep() {
             }
         }
         
-        textEl.innerHTML = parseDialogueText(step.text || "");
+        formattedText = parseDialogueText(step.text || "");
         
         // Apply inline text formatting flags
         if (step.text_italic) {
@@ -311,6 +540,9 @@ function renderDialogueStep() {
         }
     }
 
+    // Start typewriter effect
+    startTypewriter(textEl, formattedText);
+
     // Sprites display
     const spriteSlots = {
         'left': document.getElementById('sprite-left'),
@@ -318,14 +550,11 @@ function renderDialogueStep() {
         'right': document.getElementById('sprite-right')
     };
 
-    // If step contains a sprite setting, adjust that position.
-    // We also support clearing sprites.
     if (step.sprite) {
         let pos = step.sprite.position;
         if (pos === undefined || pos === null) pos = 'center';
         const imgUrl = step.sprite.image || '';
         
-        // Find which slot to use and set its horizontal and vertical positions
         let slotName = 'center';
         let leftValue = '';
         let bottomValue = '0%';
@@ -336,7 +565,6 @@ function renderDialogueStep() {
             leftValue = x + '%';
             bottomValue = y + '%';
             
-            // Map X coordinate to slot
             if (x < 35) slotName = 'left';
             else if (x > 65) slotName = 'right';
             else slotName = 'center';
@@ -381,7 +609,6 @@ function renderDialogueStep() {
     if (currentDialogueIndex < scene.dialogues.length - 1) {
         indicator.innerText = "▶";
     } else {
-        // If it's the last dialogue, change indicator or hide
         if (scene.choices && scene.choices.length > 0) {
             indicator.innerText = "❓";
         } else {
@@ -394,12 +621,16 @@ function renderDialogueStep() {
 function onDialogueClick() {
     if (isGamePaused || isMenuVisible) return;
 
+    // If typewriter is still running, skip to full text first
+    if (skipTypewriter()) return;
+
     const scene = window.storyData.scenes[currentSceneId];
     if (!scene) return;
 
     if (currentDialogueIndex < scene.dialogues.length - 1) {
         currentDialogueIndex++;
         renderDialogueStep();
+        saveGameState();
     } else {
         showSceneEndOptions();
     }
@@ -420,10 +651,11 @@ function showSceneEndOptions() {
         choicesPanel.innerHTML = '';
         choicesPanel.style.display = 'flex';
 
-        scene.choices.forEach(choice => {
+        scene.choices.forEach((choice, index) => {
             const btn = document.createElement('div');
             btn.className = 'choice-btn';
-            btn.innerText = choice.text;
+            btn.style.setProperty('--choice-delay', `${index * 0.1}s`);
+            btn.innerText = `${index + 1}. ${choice.text}`;
             btn.onclick = () => {
                 // Check ads timer before loading next scene
                 checkAndTriggerAd(() => {
@@ -439,13 +671,18 @@ function showSceneEndOptions() {
         });
     } else {
         // End of game
+        stopTypewriter();
         uiLayer.style.display = 'none';
         const choicesPanel = document.getElementById('choices-panel');
         choicesPanel.innerHTML = `
-            <div style="text-align:center; color: #fff; margin-bottom: 20px;">Конец Истории</div>
-            <div class="choice-btn" onclick="restartGame()">🔄 Играть заново</div>
+            <div class="end-screen">
+                <div class="end-screen-title">Конец Истории</div>
+                <div class="end-screen-subtitle">Спасибо за прохождение!</div>
+            </div>
+            <div class="choice-btn" style="--choice-delay: 0.3s" onclick="restartGame()">🔄 Играть заново</div>
         `;
         choicesPanel.style.display = 'flex';
+        clearSavedGame();
     }
 }
 
@@ -456,21 +693,6 @@ function purchaseAdsRemoval() {
     } else {
         alert("Внутриигровые покупки не настроены в этом проекте.");
     }
-}
-
-// Monetization Timer checking in background
-function startAdTimer() {
-    if (!adsEnabled) return;
-    
-    setInterval(() => {
-        // If ads are disabled by payment, do nothing
-        if (isAdsDisabled) return;
-
-        const elapsed = Date.now() - lastAdTime;
-        if (elapsed >= adIntervalMs) {
-            console.log("Ads interval reached. Ready to show advertisement on next transition.");
-        }
-    }, 1000);
 }
 
 // Check and trigger advertisement on scene transitions or choice selections
@@ -486,16 +708,16 @@ function checkAndTriggerAd(onCompleteCallback) {
         pauseGame();
         
         // Show advertisement
-        // Once ad closes (or errors), resumeGame is triggered, resetting timer, and then we continue the transition
+        const originalCallback = onAdCloseCallback;
         onAdCloseCallback = (wasShown) => {
             resumeGame();
             lastAdTime = Date.now();
+            onAdCloseCallback = originalCallback; // Restore
             onCompleteCallback();
         };
         
         showFullscreenAd();
     } else {
-        // If interval is not yet reached, continue immediately
         onCompleteCallback();
     }
 }
@@ -506,7 +728,7 @@ function pauseGame() {
     const pauseEl = document.getElementById('pause-overlay');
     if (pauseEl) pauseEl.style.display = 'flex';
     
-    // Mute any sound if context exists (HTML5 Audio integration helper)
+    // Mute any sound if context exists
     muteAllAudio(true);
 }
 
@@ -543,7 +765,89 @@ function muteAllAudio(shouldMute) {
             window.audioContext.resume();
         }
     }
-    console.log(shouldMute ? "Audio Muted." : "Audio Unmuted.");
+}
+
+// Save / Load game state via localStorage
+function getStorageKey() {
+    const title = (window.storyData && window.storyData.config && window.storyData.config.title) || "myvn";
+    return `myvn_save_${title}`;
+}
+
+function saveGameState() {
+    try {
+        const state = {
+            sceneId: currentSceneId,
+            dialogueIndex: currentDialogueIndex,
+            timestamp: Date.now()
+        };
+        localStorage.setItem(getStorageKey(), JSON.stringify(state));
+    } catch (e) {
+        console.log("Failed to save game state:", e);
+    }
+}
+
+function hasSavedGame() {
+    try {
+        return !!localStorage.getItem(getStorageKey());
+    } catch (e) {
+        return false;
+    }
+}
+
+function loadGameState() {
+    try {
+        const data = JSON.parse(localStorage.getItem(getStorageKey()));
+        if (data && data.sceneId && window.storyData.scenes[data.sceneId]) {
+            isMenuVisible = false;
+            const menuScreen = document.getElementById('menu-screen');
+            menuScreen.style.opacity = '0';
+            setTimeout(() => { menuScreen.style.display = 'none'; }, 500);
+            
+            loadScene(data.sceneId);
+            // Advance to saved dialogue index
+            const targetIdx = data.dialogueIndex || 0;
+            for (let i = 0; i < targetIdx; i++) {
+                const scene = window.storyData.scenes[currentSceneId];
+                if (scene && scene.dialogues && i < scene.dialogues.length - 1) {
+                    currentDialogueIndex = i + 1;
+                }
+            }
+            if (targetIdx > 0) renderDialogueStep();
+        } else {
+            startGame();
+        }
+    } catch (e) {
+        console.log("Failed to load saved game:", e);
+        startGame();
+    }
+}
+
+function clearSavedGame() {
+    try {
+        localStorage.removeItem(getStorageKey());
+    } catch (e) {
+        // Ignore
+    }
+}
+
+// HUD save/load buttons
+function saveGameManual() {
+    saveGameState();
+    // Show brief notification
+    const indicator = document.getElementById('next-indicator');
+    if (indicator) {
+        const old = indicator.innerText;
+        indicator.innerText = "💾";
+        setTimeout(() => { indicator.innerText = old; }, 1000);
+    }
+}
+
+function loadGameManual() {
+    if (hasSavedGame()) {
+        loadGameState();
+    } else {
+        alert("Нет сохранённого прогресса.");
+    }
 }
 
 // Adaptive scale function to make it work on mobile and different resolutions
