@@ -18,6 +18,12 @@ window.storyData = {
         "backgrounds": {
             "Город": "#2c3e50",
             "Лес": "#0b2611"
+        },
+        "music": {
+            "Главная Тема": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+        },
+        "sfx": {
+            "Клик": "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg"
         }
     },
     "gui": {
@@ -40,23 +46,27 @@ window.storyData = {
     "scenes": {
         "scene_1": {
             "background": "#14141f",
+            "transition": "fade",
+            "bgm": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
             "dialogues": [
                 {
                     "character_id": "",
                     "speaker": "Рассказчик",
-                    "text": "Добро пожаловать в демонстрационную новеллу!",
+                    "text": "Добро пожаловать в демонстрационную новеллу с музыкой!",
                     "is_thought": false,
                     "text_bold": true,
                     "text_italic": false,
+                    "sfx": "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg",
                     "sprite": {"position": "center", "image": ""}
                 },
                 {
                     "character_id": "alisa",
                     "speaker": "Алиса",
-                    "text": "Привет! Я твой первый персонаж. И я могу общаться с тобой.",
+                    "text": "Привет! Я твой первый персонаж. Слышишь музыку на фоне?",
                     "is_thought": false,
                     "text_bold": false,
                     "text_italic": false,
+                    "sfx": "",
                     "sprite": {
                         "position": "center",
                         "image": "https://img.icons8.com/color/344/anime-emoji.png"
@@ -69,6 +79,7 @@ window.storyData = {
                     "is_thought": true,
                     "text_bold": false,
                     "text_italic": true,
+                    "sfx": "",
                     "sprite": {"position": "center", "image": ""}
                 },
                 {
@@ -78,6 +89,7 @@ window.storyData = {
                     "is_thought": false,
                     "text_bold": false,
                     "text_italic": false,
+                    "sfx": "",
                     "sprite": {
                         "position": "center",
                         "image": "https://img.icons8.com/color/344/anime-emoji.png"
@@ -86,17 +98,19 @@ window.storyData = {
             ],
             "choices": [
                 {
-                    "text": "Пойти в таинственный лес",
+                    "text": "Пойти в таинственный лес (плавный сдвиг)",
                     "next_scene": "scene_forest"
                 },
                 {
-                    "text": "Остаться в городе",
+                    "text": "Остаться в городе (зум-эффект)",
                     "next_scene": "scene_city"
                 }
             ]
         },
         "scene_forest": {
             "background": "#0b2611",
+            "transition": "slide",
+            "bgm": "",
             "dialogues": [
                 {
                     "character_id": "",
@@ -105,6 +119,7 @@ window.storyData = {
                     "is_thought": false,
                     "text_bold": false,
                     "text_italic": false,
+                    "sfx": "",
                     "sprite": {"position": "center", "image": ""}
                 },
                 {
@@ -114,6 +129,7 @@ window.storyData = {
                     "is_thought": false,
                     "text_bold": false,
                     "text_italic": false,
+                    "sfx": "",
                     "sprite": {
                         "position": "center",
                         "image": "https://img.icons8.com/color/344/anime-emoji.png"
@@ -129,14 +145,17 @@ window.storyData = {
         },
         "scene_city": {
             "background": "#2c3e50",
+            "transition": "zoom",
+            "bgm": "stop",
             "dialogues": [
                 {
                     "character_id": "",
                     "speaker": "Рассказчик",
-                    "text": "Город сиял неоновыми огнями и шумел машинами.",
+                    "text": "Город сиял неоновыми огнями и шумел машинами. Музыка остановлена.",
                     "is_thought": false,
                     "text_bold": false,
                     "text_italic": false,
+                    "sfx": "",
                     "sprite": {"position": "center", "image": ""}
                 },
                 {
@@ -146,6 +165,7 @@ window.storyData = {
                     "is_thought": false,
                     "text_bold": false,
                     "text_italic": false,
+                    "sfx": "",
                     "sprite": {
                         "position": "center",
                         "image": "https://img.icons8.com/color/344/anime-emoji.png"

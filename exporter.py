@@ -51,15 +51,30 @@ def export_project(project_data, export_dir):
             for expr_name, img_path in list(sprites_map.items()):
                 sprites_map[expr_name] = process_asset_path(img_path)
 
-        # 3. Update scene background paths and dialogue sprite paths
+        # 2.5 Process audio library assets (music & sfx)
+        music_lib = config.get("music", {})
+        for music_name, m_path in list(music_lib.items()):
+            music_lib[music_name] = process_asset_path(m_path)
+            
+        sfx_lib = config.get("sfx", {})
+        for sfx_name, s_path in list(sfx_lib.items()):
+            sfx_lib[sfx_name] = process_asset_path(s_path)
+
+        # 3. Update scene backgrounds, bgm, and dialogue sprites/sfx paths
         for scene_id, scene in exported_data.get("scenes", {}).items():
             if "background" in scene:
                 scene["background"] = process_asset_path(scene["background"])
+            
+            if "bgm" in scene and scene["bgm"] and scene["bgm"] != "stop":
+                scene["bgm"] = process_asset_path(scene["bgm"])
             
             for dialogue in scene.get("dialogues", []):
                 if "sprite" in dialogue and dialogue["sprite"]:
                     if "image" in dialogue["sprite"]:
                         dialogue["sprite"]["image"] = process_asset_path(dialogue["sprite"]["image"])
+                        
+                if "sfx" in dialogue and dialogue["sfx"]:
+                    dialogue["sfx"] = process_asset_path(dialogue["sfx"])
         
         # Write story.js
         story_content = f"// Automatically generated visual novel story script\nwindow.storyData = {json.dumps(exported_data, indent=4, ensure_ascii=False)};\n"

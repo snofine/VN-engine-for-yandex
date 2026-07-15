@@ -4,8 +4,10 @@ let currentDialogueIndex = 0;
 let isMenuVisible = true;
 let isGamePaused = false;
 
-// Audio context or HTML5 Audio tracking (for future expansion or muting)
+// Audio context or HTML5 Audio tracking
 let isMuted = false;
+let bgmAudio = null;
+let currentBgmPath = "";
 
 // Monetization & Ad Timer variables
 let lastAdTime = Date.now();
@@ -153,19 +155,58 @@ function loadScene(sceneId) {
     
     const scene = scenes[sceneId];
 
-    // 1. Set Background
+    // 1. Set Background with transition effects
     const bgLayer = document.getElementById('bg-layer');
-    if (scene.background) {
-        if (scene.background.startsWith('#') || scene.background.startsWith('rgba') || scene.background.startsWith('rgb')) {
-            bgLayer.style.backgroundImage = 'none';
-            bgLayer.style.backgroundColor = scene.background;
+    const transType = scene.transition || 'none';
+    let transClass = '';
+    
+    if (transType === 'fade') transClass = 'transition-fade-out';
+    else if (transType === 'slide') transClass = 'transition-slide-out';
+    else if (transType === 'zoom') transClass = 'transition-zoom-out';
+
+    const updateBgGraphic = () => {
+        if (scene.background) {
+            if (scene.background.startsWith('#') || scene.background.startsWith('rgba') || scene.background.startsWith('rgb')) {
+                bgLayer.style.backgroundImage = 'none';
+                bgLayer.style.backgroundColor = scene.background;
+            } else {
+                bgLayer.style.backgroundColor = 'transparent';
+                bgLayer.style.backgroundImage = `url('${scene.background}')`;
+            }
         } else {
-            bgLayer.style.backgroundColor = 'transparent';
-            bgLayer.style.backgroundImage = `url('${scene.background}')`;
+            bgLayer.style.backgroundImage = 'none';
+            bgLayer.style.backgroundColor = '#000';
         }
+    };
+
+    if (transClass) {
+        bgLayer.classList.add(transClass);
+        setTimeout(() => {
+            updateBgGraphic();
+            bgLayer.classList.remove(transClass);
+        }, 250);
     } else {
-        bgLayer.style.backgroundImage = 'none';
-        bgLayer.style.backgroundColor = '#000';
+        updateBgGraphic();
+    }
+
+    // 2. Play Background Music (BGM)
+    if (scene.bgm) {
+        if (scene.bgm === 'stop') {
+            if (bgmAudio) {
+                bgmAudio.pause();
+                bgmAudio = null;
+            }
+            currentBgmPath = "";
+        } else if (scene.bgm !== currentBgmPath) {
+            if (bgmAudio) {
+                bgmAudio.pause();
+            }
+            currentBgmPath = scene.bgm;
+            bgmAudio = new Audio(scene.bgm);
+            bgmAudio.loop = true;
+            bgmAudio.muted = isMuted;
+            bgmAudio.play().catch(e => console.log("BGM playback blocked or deferred until interaction:", e));
+        }
     }
 
     // Hide choices at start of scene
@@ -191,6 +232,13 @@ function renderDialogueStep() {
     }
 
     const step = scene.dialogues[currentDialogueIndex];
+    
+    // Play sound effect (SFX) if specified in dialogue step
+    if (step.sfx) {
+        const sfx = new Audio(step.sfx);
+        sfx.muted = isMuted;
+        sfx.play().catch(e => console.log("SFX playback blocked or failed:", e));
+    }
     
     // Speaker name & Custom character color
     const speakerEl = document.getElementById('speaker-name');
@@ -448,7 +496,13 @@ function resumeGame() {
 // Sound mute/unmute
 function muteAllAudio(shouldMute) {
     isMuted = shouldMute;
-    // Mute all HTML5 Audio and Video elements
+    
+    // Mute our active background music
+    if (bgmAudio) {
+        bgmAudio.muted = shouldMute;
+    }
+    
+    // Mute all other HTML5 Audio and Video elements
     const mediaElements = document.querySelectorAll('audio, video');
     mediaElements.forEach(media => {
         media.muted = shouldMute;

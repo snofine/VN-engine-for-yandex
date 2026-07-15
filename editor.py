@@ -225,7 +225,7 @@ class VisualNovelEditor(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("myvn - No-Code GUI Конструктор Визуальных Новелл (Яндекс Игры)")
-        self.resize(1300, 900)
+        self.resize(1300, 950)
         self.setStyleSheet(DARK_THEME_STYLE)
         
         # State
@@ -239,7 +239,9 @@ class VisualNovelEditor(QMainWindow):
                 "export_dir": "",
                 "gui_profile": "Дефолтный",
                 "characters": {},
-                "backgrounds": {}
+                "backgrounds": {},
+                "music": {},
+                "sfx": {}
             },
             "gui": dict(GUI_PRESETS["Дефолтный"]),
             "scenes": {}
@@ -252,6 +254,9 @@ class VisualNovelEditor(QMainWindow):
         self.selected_char_id = None
         self.selected_char_sprite_idx = None
         self.selected_bg_lib_name = None
+        
+        self.selected_music_lib_name = None
+        self.selected_sfx_lib_name = None
         
         self.is_updating_ui = False # Guard to prevent update recursion
         
@@ -323,24 +328,58 @@ class VisualNovelEditor(QMainWindow):
         scene_editor_tab = QWidget()
         scene_editor_layout = QVBoxLayout(scene_editor_tab)
         
-        # Scene properties (Background)
-        bg_group = QGroupBox("Задний фон сцены")
-        bg_layout = QHBoxLayout(bg_group)
+        # Scene properties (Background, Transition, Music)
+        scene_props_group = QGroupBox("Свойства сцены (фон, эффекты и BGM)")
+        scene_props_layout = QHBoxLayout(scene_props_group)
         
-        # Background Dropdown mapping to library
+        # 1. Bg selector
+        bg_select_layout = QVBoxLayout()
+        bg_select_layout.addWidget(QLabel("<b>Задний фон сцены:</b>"))
         self.scene_bg_combo = QComboBox()
         self.scene_bg_combo.currentIndexChanged.connect(self.scene_bg_combo_changed)
-        bg_layout.addWidget(self.scene_bg_combo)
+        bg_select_layout.addWidget(self.scene_bg_combo)
         
         self.bg_input = QLineEdit()
         self.bg_input.setPlaceholderText("Цвет или файл...")
         self.bg_input.textChanged.connect(self.update_scene_bg)
-        bg_layout.addWidget(self.bg_input)
+        bg_select_layout.addWidget(self.bg_input)
         
         self.bg_browse_btn = QPushButton("Выбрать файл")
         self.bg_browse_btn.clicked.connect(self.browse_bg_image)
-        bg_layout.addWidget(self.bg_browse_btn)
-        scene_editor_layout.addWidget(bg_group)
+        bg_select_layout.addWidget(self.bg_browse_btn)
+        scene_props_layout.addLayout(bg_select_layout)
+        
+        # 2. Transition selector
+        trans_select_layout = QVBoxLayout()
+        trans_select_layout.addWidget(QLabel("<b>Эффект появления:</b>"))
+        self.scene_trans_combo = QComboBox()
+        self.scene_trans_combo.addItem("Без эффекта", "none")
+        self.scene_trans_combo.addItem("Затухание (Fade)", "fade")
+        self.scene_trans_combo.addItem("Сдвиг (Slide)", "slide")
+        self.scene_trans_combo.addItem("Масштаб (Zoom)", "zoom")
+        self.scene_trans_combo.currentIndexChanged.connect(self.update_scene_transition)
+        trans_select_layout.addWidget(self.scene_trans_combo)
+        trans_select_layout.addStretch()
+        scene_props_layout.addLayout(trans_select_layout)
+        
+        # 3. BGM selector
+        bgm_select_layout = QVBoxLayout()
+        bgm_select_layout.addWidget(QLabel("<b>Музыка (BGM):</b>"))
+        self.scene_bgm_combo = QComboBox()
+        self.scene_bgm_combo.currentIndexChanged.connect(self.scene_bgm_combo_changed)
+        bgm_select_layout.addWidget(self.scene_bgm_combo)
+        
+        self.scene_bgm_input = QLineEdit()
+        self.scene_bgm_input.setPlaceholderText("Путь к файлу BGM...")
+        self.scene_bgm_input.textChanged.connect(self.update_scene_bgm)
+        bgm_select_layout.addWidget(self.scene_bgm_input)
+        
+        self.scene_bgm_browse_btn = QPushButton("Обзор музыки")
+        self.scene_bgm_browse_btn.clicked.connect(self.browse_scene_bgm)
+        bgm_select_layout.addWidget(self.scene_bgm_browse_btn)
+        scene_props_layout.addLayout(bgm_select_layout)
+        
+        scene_editor_layout.addWidget(scene_props_group)
         
         # Dialogue steps splitter
         scene_splitter = QSplitter(Qt.Vertical)
@@ -419,6 +458,23 @@ class VisualNovelEditor(QMainWindow):
         self.text_input.setPlaceholderText("Текст, который отобразится на экране...")
         self.text_input.textChanged.connect(self.save_current_dialogue_fields)
         diag_detail_layout.addRow("Текст реплики:", self.text_input)
+        
+        # Dialogue Sound Effect (SFX)
+        self.diag_sfx_combo = QComboBox()
+        self.diag_sfx_combo.currentIndexChanged.connect(self.diag_sfx_combo_changed)
+        diag_detail_layout.addRow("Звуковой эффект:", self.diag_sfx_combo)
+        
+        self.sfx_raw_widget = QWidget()
+        sfx_raw_layout = QHBoxLayout(self.sfx_raw_widget)
+        sfx_raw_layout.setContentsMargins(0, 0, 0, 0)
+        self.diag_sfx_input = QLineEdit()
+        self.diag_sfx_input.setPlaceholderText("Файл звука...")
+        self.diag_sfx_input.textChanged.connect(self.save_current_dialogue_fields)
+        sfx_raw_layout.addWidget(self.diag_sfx_input)
+        sfx_browse_btn = QPushButton("Обзор")
+        sfx_browse_btn.clicked.connect(self.browse_dialogue_sfx)
+        sfx_raw_layout.addWidget(sfx_browse_btn)
+        diag_detail_layout.addRow("Файл SFX:", self.sfx_raw_widget)
         
         # Sprite picker combo (Expressions list)
         self.diag_sprite_expr_combo = QComboBox()
@@ -506,18 +562,20 @@ class VisualNovelEditor(QMainWindow):
         
         right_tab_widget.addTab(scene_editor_tab, "🎬 Редактор Сцен")
         
-        # TAB 2: ASSETS LIBRARY (NEW)
+        # TAB 2: ASSETS LIBRARY
         assets_tab = QWidget()
-        assets_layout = QHBoxLayout(assets_tab)
-        assets_layout.setContentsMargins(10, 10, 10, 10)
+        assets_layout = QVBoxLayout(assets_tab)
+        assets_layout.setContentsMargins(5, 5, 5, 5)
         
-        assets_splitter = QSplitter(Qt.Horizontal)
-        assets_layout.addWidget(assets_splitter)
+        assets_inner_tab = QTabWidget()
+        assets_layout.addWidget(assets_inner_tab)
         
-        # Left Panel: Characters Library
+        # 2A: Characters Subtab
+        char_subtab = QWidget()
+        char_subtab_lay = QHBoxLayout(char_subtab)
+        
         char_lib_widget = QGroupBox("👥 Библиотека Персонажей")
         char_lib_layout = QVBoxLayout(char_lib_widget)
-        
         self.char_lib_list = QListWidget()
         self.char_lib_list.currentRowChanged.connect(self.character_selected)
         char_lib_layout.addWidget(self.char_lib_list)
@@ -532,10 +590,11 @@ class VisualNovelEditor(QMainWindow):
         char_btns.addWidget(del_char_btn)
         char_lib_layout.addLayout(char_btns)
         
+        char_subtab_lay.addWidget(char_lib_widget)
+        
         # Character properties panel
-        self.char_props_panel = QWidget()
+        self.char_props_panel = QGroupBox("Параметры персонажа")
         char_props_layout = QFormLayout(self.char_props_panel)
-        char_props_layout.setContentsMargins(0, 5, 0, 0)
         
         self.char_name_input = QLineEdit()
         self.char_name_input.textChanged.connect(self.char_field_changed)
@@ -580,15 +639,17 @@ class VisualNovelEditor(QMainWindow):
         sprite_path_lay.addWidget(sprite_path_browse)
         char_props_layout.addRow("Путь к файлу:", sprite_path_lay)
         
-        char_lib_layout.addWidget(self.char_props_panel)
+        char_subtab_lay.addWidget(self.char_props_panel)
         self.char_props_panel.hide()
         
-        assets_splitter.addWidget(char_lib_widget)
+        assets_inner_tab.addTab(char_subtab, "👥 Персонажи")
         
-        # Right Panel: Backgrounds Library
+        # 2B: Backgrounds Subtab
+        bg_subtab = QWidget()
+        bg_subtab_lay = QHBoxLayout(bg_subtab)
+        
         bg_lib_widget = QGroupBox("🖼 Библиотека Фонов")
         bg_lib_layout = QVBoxLayout(bg_lib_widget)
-        
         self.bg_lib_list = QListWidget()
         self.bg_lib_list.currentRowChanged.connect(self.bg_lib_selected)
         bg_lib_layout.addWidget(self.bg_lib_list)
@@ -602,11 +663,10 @@ class VisualNovelEditor(QMainWindow):
         del_bg_btn.clicked.connect(self.delete_bg_lib)
         bg_btns.addWidget(del_bg_btn)
         bg_lib_layout.addLayout(bg_btns)
+        bg_subtab_lay.addWidget(bg_lib_widget)
         
-        # Background properties panel
-        self.bg_props_panel = QWidget()
+        self.bg_props_panel = QGroupBox("Параметры фона")
         bg_props_lay = QFormLayout(self.bg_props_panel)
-        bg_props_lay.setContentsMargins(0, 5, 0, 0)
         
         self.bg_name_input = QLineEdit()
         self.bg_name_input.textChanged.connect(self.bg_lib_field_changed)
@@ -620,12 +680,95 @@ class VisualNovelEditor(QMainWindow):
         bg_path_lay.addWidget(self.bg_path_input)
         bg_path_lay.addWidget(bg_path_browse)
         bg_props_lay.addRow("Файл фона:", bg_path_lay)
-        
-        bg_lib_layout.addWidget(self.bg_props_panel)
+        bg_subtab_lay.addWidget(self.bg_props_panel)
         self.bg_props_panel.hide()
         
-        assets_splitter.addWidget(bg_lib_widget)
-        assets_splitter.setSizes([650, 650])
+        assets_inner_tab.addTab(bg_subtab, "🖼 Фоны")
+        
+        # 2C: Audio Subtab (Music & SFX Libraries)
+        audio_subtab = QWidget()
+        audio_subtab_lay = QHBoxLayout(audio_subtab)
+        
+        # Split into Left (BGM) and Right (SFX)
+        audio_splitter = QSplitter(Qt.Horizontal)
+        audio_subtab_lay.addWidget(audio_splitter)
+        
+        # Left Panel: Music Library
+        music_lib_widget = QGroupBox("🎵 Фоновая Музыка (BGM)")
+        music_lib_layout = QVBoxLayout(music_lib_widget)
+        
+        self.music_lib_list = QListWidget()
+        self.music_lib_list.currentRowChanged.connect(self.music_lib_selected)
+        music_lib_layout.addWidget(self.music_lib_list)
+        
+        music_btns = QHBoxLayout()
+        add_music_btn = QPushButton("➕ Добавить BGM")
+        add_music_btn.clicked.connect(self.add_music_lib)
+        music_btns.addWidget(add_music_btn)
+        del_music_btn = QPushButton("❌ Удалить BGM")
+        del_music_btn.setObjectName("danger-btn")
+        del_music_btn.clicked.connect(self.delete_music_lib)
+        music_btns.addWidget(del_music_btn)
+        music_lib_layout.addLayout(music_btns)
+        
+        self.music_props_widget = QWidget()
+        music_props_lay = QFormLayout(self.music_props_widget)
+        music_props_lay.setContentsMargins(0, 5, 0, 0)
+        self.music_name_input = QLineEdit()
+        self.music_name_input.textChanged.connect(self.music_lib_field_changed)
+        music_props_lay.addRow("Название BGM:", self.music_name_input)
+        self.music_path_input = QLineEdit()
+        self.music_path_input.textChanged.connect(self.music_lib_field_changed)
+        music_path_browse = QPushButton("Обзор")
+        music_path_browse.clicked.connect(self.browse_music_lib_path)
+        music_path_lay = QHBoxLayout()
+        music_path_lay.addWidget(self.music_path_input)
+        music_path_lay.addWidget(music_path_browse)
+        music_props_lay.addRow("Файл музыки:", music_path_lay)
+        music_lib_layout.addWidget(self.music_props_widget)
+        self.music_props_widget.hide()
+        
+        audio_splitter.addWidget(music_lib_widget)
+        
+        # Right Panel: SFX Library
+        sfx_lib_widget = QGroupBox("🔊 Звуковые Эффекты (SFX)")
+        sfx_lib_layout = QVBoxLayout(sfx_lib_widget)
+        
+        self.sfx_lib_list = QListWidget()
+        self.sfx_lib_list.currentRowChanged.connect(self.sfx_lib_selected)
+        sfx_lib_layout.addWidget(self.sfx_lib_list)
+        
+        sfx_btns = QHBoxLayout()
+        add_sfx_btn = QPushButton("➕ Добавить SFX")
+        add_sfx_btn.clicked.connect(self.add_sfx_lib)
+        sfx_btns.addWidget(add_sfx_btn)
+        del_sfx_btn = QPushButton("❌ Удалить SFX")
+        del_sfx_btn.setObjectName("danger-btn")
+        del_sfx_btn.clicked.connect(self.delete_sfx_lib)
+        sfx_btns.addWidget(del_sfx_btn)
+        sfx_lib_layout.addLayout(sfx_btns)
+        
+        self.sfx_props_widget = QWidget()
+        sfx_props_lay = QFormLayout(self.sfx_props_widget)
+        sfx_props_lay.setContentsMargins(0, 5, 0, 0)
+        self.sfx_name_input = QLineEdit()
+        self.sfx_name_input.textChanged.connect(self.sfx_lib_field_changed)
+        sfx_props_lay.addRow("Название SFX:", self.sfx_name_input)
+        self.sfx_path_input = QLineEdit()
+        self.sfx_path_input.textChanged.connect(self.sfx_lib_field_changed)
+        sfx_path_browse = QPushButton("Обзор")
+        sfx_path_browse.clicked.connect(self.browse_sfx_lib_path)
+        sfx_path_lay = QHBoxLayout()
+        sfx_path_lay.addWidget(self.sfx_path_input)
+        sfx_path_lay.addWidget(sfx_path_browse)
+        sfx_props_lay.addRow("Файл звука:", sfx_path_lay)
+        sfx_lib_layout.addWidget(self.sfx_props_widget)
+        self.sfx_props_widget.hide()
+        
+        audio_splitter.addWidget(sfx_lib_widget)
+        audio_splitter.setSizes([600, 600])
+        
+        assets_inner_tab.addTab(audio_subtab, "🎵 Звуки и Музыка")
         
         right_tab_widget.addTab(assets_tab, "📦 Библиотека Ассетов")
         
@@ -839,7 +982,7 @@ class VisualNovelEditor(QMainWindow):
         
         # Set splitter sizes
         main_splitter.setSizes([300, 900])
-        scene_splitter.setSizes([400, 400])
+        scene_splitter.setSizes([450, 450])
         details_splitter.setSizes([450, 450])
         
     # Project File Management
@@ -865,20 +1008,25 @@ class VisualNovelEditor(QMainWindow):
                 "backgrounds": {
                     "Город": "#2c3e50",
                     "Лес": "#0b2611"
-                }
+                },
+                "music": {},
+                "sfx": {}
             },
             "gui": dict(GUI_PRESETS["Дефолтный"]),
             "scenes": {
                 "scene_1": {
                     "background": "#14141f",
+                    "transition": "fade",
+                    "bgm": "",
                     "dialogues": [
                         {
                             "character_id": "alisa",
                             "speaker": "Алиса",
-                            "text": "Привет! Это твоя первая сцена.",
+                            "text": "Привет! Это твоя первая сцена с плавным переходом.",
                             "is_thought": False,
                             "text_bold": False,
                             "text_italic": False,
+                            "sfx": "",
                             "sprite": {"position": "center", "image": "https://img.icons8.com/color/344/anime-emoji.png"}
                         }
                     ],
@@ -904,11 +1052,15 @@ class VisualNovelEditor(QMainWindow):
             if "config" not in data or "scenes" not in data:
                 raise ValueError("Некорректный формат файла проекта.")
             
-            # Upgrade keys for old files if they are missing
+            # Upgrade keys for old files
             if "characters" not in data["config"]:
                 data["config"]["characters"] = {}
             if "backgrounds" not in data["config"]:
                 data["config"]["backgrounds"] = {}
+            if "music" not in data["config"]:
+                data["config"]["music"] = {}
+            if "sfx" not in data["config"]:
+                data["config"]["sfx"] = {}
                 
             self.project_path = file_path
             self.project_data = data
@@ -1085,8 +1237,14 @@ class VisualNovelEditor(QMainWindow):
         # Refresh Backgrounds combo from library
         self.refresh_bg_combo_list()
         
+        # Refresh BGM combo from library
+        self.refresh_bgm_combo_list()
+        
         # Refresh Character combos in dialogue panel
         self.refresh_dialogue_char_combos()
+        
+        # Refresh SFX combo from library
+        self.refresh_sfx_combo_list()
 
     # GUI Profile handlers
     def gui_profile_changed(self, index):
@@ -1188,6 +1346,8 @@ class VisualNovelEditor(QMainWindow):
             
         self.project_data["scenes"][scene_id] = {
             "background": "#14141f",
+            "transition": "none",
+            "bgm": "",
             "dialogues": [],
             "choices": [],
             "next_scene": ""
@@ -1242,6 +1402,7 @@ class VisualNovelEditor(QMainWindow):
         
     def clear_scene_ui(self):
         self.bg_input.clear()
+        self.scene_bgm_input.clear()
         self.dialogue_list.clear()
         self.clear_dialogue_fields()
         self.choices_list.clear()
@@ -1279,6 +1440,46 @@ class VisualNovelEditor(QMainWindow):
             self.scene_bg_combo.setCurrentIndex(0) # [Вручную / Цвет]
             self.bg_input.show()
             self.bg_browse_btn.show()
+            
+        # Match transition combo selection
+        trans = scene.get("transition", "none")
+        idx_trans = self.scene_trans_combo.findData(trans)
+        if idx_trans >= 0:
+            self.scene_trans_combo.setCurrentIndex(idx_trans)
+        else:
+            self.scene_trans_combo.setCurrentIndex(0)
+            
+        # Match BGM combo selection
+        scene_bgm = scene.get("bgm", "")
+        self.scene_bgm_input.setText(scene_bgm)
+        self.refresh_bgm_combo_list()
+        
+        found_bgm = False
+        if scene_bgm == "stop":
+            self.scene_bgm_combo.setCurrentIndex(1) # [Остановить музыку]
+            self.scene_bgm_input.hide()
+            self.scene_bgm_browse_btn.hide()
+            found_bgm = True
+        elif scene_bgm == "":
+            self.scene_bgm_combo.setCurrentIndex(0) # [Без изменений]
+            self.scene_bgm_input.hide()
+            self.scene_bgm_browse_btn.hide()
+            found_bgm = True
+        else:
+            music_lib = self.project_data["config"].get("music", {})
+            for name, path in music_lib.items():
+                if path == scene_bgm:
+                    idx = self.scene_bgm_combo.findText(name)
+                    if idx >= 0:
+                        self.scene_bgm_combo.setCurrentIndex(idx)
+                        self.scene_bgm_input.hide()
+                        self.scene_bgm_browse_btn.hide()
+                        found_bgm = True
+                        break
+        if not found_bgm:
+            self.scene_bgm_combo.setCurrentIndex(2) # [Вручную / Путь]
+            self.scene_bgm_input.show()
+            self.scene_bgm_browse_btn.show()
         
         # Populate Dialogues list
         self.dialogue_list.clear()
@@ -1314,6 +1515,15 @@ class VisualNovelEditor(QMainWindow):
         if self.is_updating_ui or not self.selected_scene_id: return
         self.project_data["scenes"][self.selected_scene_id]["background"] = text
 
+    def update_scene_transition(self, index):
+        if self.is_updating_ui or not self.selected_scene_id: return
+        trans = self.scene_trans_combo.currentData()
+        self.project_data["scenes"][self.selected_scene_id]["transition"] = trans
+
+    def update_scene_bgm(self, text):
+        if self.is_updating_ui or not self.selected_scene_id: return
+        self.project_data["scenes"][self.selected_scene_id]["bgm"] = text
+
     def browse_bg_image(self):
         if not self.selected_scene_id: return
         file_path, _ = QFileDialog.getOpenFileName(
@@ -1321,6 +1531,14 @@ class VisualNovelEditor(QMainWindow):
         )
         if file_path:
             self.bg_input.setText(file_path)
+
+    def browse_scene_bgm(self):
+        if not self.selected_scene_id: return
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Выбрать BGM аудиофайл", "", "Музыка (*.mp3 *.ogg *.wav)"
+        )
+        if file_path:
+            self.scene_bgm_input.setText(file_path)
             
     def scene_bg_combo_changed(self, index):
         if self.is_updating_ui or not self.selected_scene_id: return
@@ -1339,6 +1557,32 @@ class VisualNovelEditor(QMainWindow):
             self.bg_input.setText(bg_path)
             self.update_scene_bg(bg_path)
 
+    def scene_bgm_combo_changed(self, index):
+        if self.is_updating_ui or not self.selected_scene_id: return
+        
+        bgm_name = self.scene_bgm_combo.currentText()
+        if bgm_name == "[Без изменений]":
+            self.scene_bgm_input.hide()
+            self.scene_bgm_browse_btn.hide()
+            self.scene_bgm_input.setText("")
+            self.update_scene_bgm("")
+        elif bgm_name == "[Остановить музыку]":
+            self.scene_bgm_input.hide()
+            self.scene_bgm_browse_btn.hide()
+            self.scene_bgm_input.setText("stop")
+            self.update_scene_bgm("stop")
+        elif bgm_name == "[Вручную / Путь к файлу]":
+            self.scene_bgm_input.show()
+            self.scene_bgm_browse_btn.show()
+        else:
+            self.scene_bgm_input.hide()
+            self.scene_bgm_browse_btn.hide()
+            
+            music_lib = self.project_data["config"].get("music", {})
+            m_path = music_lib.get(bgm_name, "")
+            self.scene_bgm_input.setText(m_path)
+            self.update_scene_bgm(m_path)
+
     # Dialogue steps CRUD & Edit
     def add_dialogue(self):
         if not self.selected_scene_id: return
@@ -1351,6 +1595,7 @@ class VisualNovelEditor(QMainWindow):
             "is_thought": False,
             "text_bold": False,
             "text_italic": False,
+            "sfx": "",
             "sprite": {"position": "center", "image": ""}
         }
         scene["dialogues"].append(new_step)
@@ -1391,6 +1636,30 @@ class VisualNovelEditor(QMainWindow):
             
         self.speaker_input.setText(step.get("speaker", ""))
         self.text_input.setPlainText(step.get("text", ""))
+        
+        # SFX setup
+        sfx_path = step.get("sfx", "")
+        self.diag_sfx_input.setText(sfx_path)
+        self.refresh_sfx_combo_list()
+        
+        found_sfx = False
+        if not sfx_path:
+            self.diag_sfx_combo.setCurrentIndex(0) # [Без звука]
+            self.sfx_raw_widget.hide()
+            found_sfx = True
+        else:
+            sfx_lib = self.project_data["config"].get("sfx", {})
+            for name, path in sfx_lib.items():
+                if path == sfx_path:
+                    sfx_idx = self.diag_sfx_combo.findText(name)
+                    if sfx_idx >= 0:
+                        self.diag_sfx_combo.setCurrentIndex(sfx_idx)
+                        self.sfx_raw_widget.hide()
+                        found_sfx = True
+                        break
+        if not found_sfx:
+            self.diag_sfx_combo.setCurrentIndex(1) # [Вручную / Путь к файлу]
+            self.sfx_raw_widget.show()
         
         # Populate sprites expressions combos
         self.refresh_dialogue_sprite_expr_combo()
@@ -1458,6 +1727,7 @@ class VisualNovelEditor(QMainWindow):
         self.speaker_input.clear()
         self.text_input.clear()
         self.sprite_input.clear()
+        self.diag_sfx_input.clear()
         self.sprite_pos_type.setCurrentIndex(0)
         self.sprite_pos_combo.setCurrentIndex(0)
         self.sprite_pos_combo.show()
@@ -1469,6 +1739,8 @@ class VisualNovelEditor(QMainWindow):
         self.diag_char_combo.setCurrentIndex(0)
         self.diag_sprite_expr_combo.setCurrentIndex(0)
         self.sprite_raw_widget.show()
+        self.diag_sfx_combo.setCurrentIndex(0)
+        self.sfx_raw_widget.hide()
         
     def save_current_dialogue_fields(self):
         if self.is_updating_ui or not self.selected_scene_id or self.selected_dialogue_idx is None:
@@ -1480,6 +1752,7 @@ class VisualNovelEditor(QMainWindow):
         step["is_thought"] = self.diag_is_thought.isChecked()
         step["text_bold"] = self.diag_text_bold.isChecked()
         step["text_italic"] = self.diag_text_italic.isChecked()
+        step["sfx"] = self.diag_sfx_input.text().strip()
         
         # Save character details
         if step["is_thought"]:
@@ -1558,6 +1831,22 @@ class VisualNovelEditor(QMainWindow):
                 
         self.save_current_dialogue_fields()
 
+    def diag_sfx_combo_changed(self, index):
+        if self.is_updating_ui: return
+        
+        sfx_name = self.diag_sfx_combo.currentText()
+        if sfx_name == "[Без звука]":
+            self.sfx_raw_widget.hide()
+            self.diag_sfx_input.setText("")
+        elif sfx_name == "[Вручную / Путь к файлу]":
+            self.sfx_raw_widget.show()
+        else:
+            self.sfx_raw_widget.hide()
+            sfx_lib = self.project_data["config"].get("sfx", {})
+            self.diag_sfx_input.setText(sfx_lib.get(sfx_name, ""))
+            
+        self.save_current_dialogue_fields()
+
     def refresh_dialogue_char_combos(self):
         # Temp save selection
         curr = self.diag_char_combo.currentData()
@@ -1601,6 +1890,14 @@ class VisualNovelEditor(QMainWindow):
         )
         if file_path:
             self.sprite_input.setText(file_path)
+
+    def browse_dialogue_sfx(self):
+        if self.selected_dialogue_idx is None: return
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Выбрать SFX звуковой эффект", "", "Звуки (*.mp3 *.ogg *.wav)"
+        )
+        if file_path:
+            self.diag_sfx_input.setText(file_path)
             
     def move_dialogue_up(self):
         if not self.selected_scene_id or self.selected_dialogue_idx is None or self.selected_dialogue_idx == 0:
@@ -1684,27 +1981,44 @@ class VisualNovelEditor(QMainWindow):
         if dir_path:
             self.export_dir_input.setText(os.path.abspath(dir_path))
 
-    # ASSETS LIBRARY OPERATIONS (NEW)
+    # ASSETS LIBRARY OPERATIONS
     def refresh_assets_tab_lists(self):
         self.is_updating_ui = True
         
-        # Populate character list
+        # 1. Populate character list
         self.char_lib_list.clear()
         chars = self.project_data["config"].get("characters", {})
         for char_id, char_info in chars.items():
             self.char_lib_list.addItem(QListWidgetItem(f"{char_info.get('name', char_id)} ({char_id})"))
             
-        # Populate backgrounds list
+        # 2. Populate backgrounds list
         self.bg_lib_list.clear()
         bgs = self.project_data["config"].get("backgrounds", {})
         for bg_name in bgs.keys():
             self.bg_lib_list.addItem(QListWidgetItem(bg_name))
             
-        # Hide sub-panels
+        # 3. Populate Music list
+        self.music_lib_list.clear()
+        music = self.project_data["config"].get("music", {})
+        for music_name in music.keys():
+            self.music_lib_list.addItem(QListWidgetItem(music_name))
+            
+        # 4. Populate SFX list
+        self.sfx_lib_list.clear()
+        sfx = self.project_data["config"].get("sfx", {})
+        for sfx_name in sfx.keys():
+            self.sfx_lib_list.addItem(QListWidgetItem(sfx_name))
+            
+        # Hide properties subpanels
         self.char_props_panel.hide()
         self.bg_props_panel.hide()
+        self.music_props_widget.hide()
+        self.sfx_props_widget.hide()
+        
         self.selected_char_id = None
         self.selected_bg_lib_name = None
+        self.selected_music_lib_name = None
+        self.selected_sfx_lib_name = None
         
         self.is_updating_ui = False
         
@@ -1722,6 +2036,41 @@ class VisualNovelEditor(QMainWindow):
         idx = self.scene_bg_combo.findText(curr_selection)
         if idx >= 0:
             self.scene_bg_combo.setCurrentIndex(idx)
+        self.is_updating_ui = False
+
+    def refresh_bgm_combo_list(self):
+        curr_selection = self.scene_bgm_combo.currentText()
+        
+        self.is_updating_ui = True
+        self.scene_bgm_combo.clear()
+        self.scene_bgm_combo.addItem("[Без изменений]")
+        self.scene_bgm_combo.addItem("[Остановить музыку]")
+        self.scene_bgm_combo.addItem("[Вручную / Путь к файлу]")
+        
+        music = self.project_data["config"].get("music", {})
+        for name in music.keys():
+            self.scene_bgm_combo.addItem(name)
+            
+        idx = self.scene_bgm_combo.findText(curr_selection)
+        if idx >= 0:
+            self.scene_bgm_combo.setCurrentIndex(idx)
+        self.is_updating_ui = False
+
+    def refresh_sfx_combo_list(self):
+        curr_selection = self.diag_sfx_combo.currentText()
+        
+        self.is_updating_ui = True
+        self.diag_sfx_combo.clear()
+        self.diag_sfx_combo.addItem("[Без звука]")
+        self.diag_sfx_combo.addItem("[Вручную / Путь к файлу]")
+        
+        sfx = self.project_data["config"].get("sfx", {})
+        for name in sfx.keys():
+            self.diag_sfx_combo.addItem(name)
+            
+        idx = self.diag_sfx_combo.findText(curr_selection)
+        if idx >= 0:
+            self.diag_sfx_combo.setCurrentIndex(idx)
         self.is_updating_ui = False
 
     # Character actions
@@ -1744,7 +2093,6 @@ class VisualNovelEditor(QMainWindow):
         }
         
         self.refresh_assets_tab_lists()
-        # Find item index and select it
         row = list(self.project_data["config"]["characters"].keys()).index(char_id)
         self.char_lib_list.setCurrentRow(row)
         self.refresh_scene_comboboxes()
@@ -1794,8 +2142,6 @@ class VisualNovelEditor(QMainWindow):
         if list_item:
             list_item.setText(f"{char_info['name']} ({self.selected_char_id})")
         self.is_updating_ui = False
-        
-        # Update in dialog combo
         self.refresh_scene_comboboxes()
         
     # Character Sprites actions
@@ -1812,7 +2158,6 @@ class VisualNovelEditor(QMainWindow):
             
         char_info["sprites"][expr_name] = ""
         
-        # Refresh
         self.is_updating_ui = True
         self.char_sprites_list.addItem(expr_name)
         self.is_updating_ui = False
@@ -1831,7 +2176,6 @@ class VisualNovelEditor(QMainWindow):
             del char_info["sprites"][expr_name]
             self.selected_char_sprite_idx = None
             
-            # Refresh list
             self.is_updating_ui = True
             self.char_sprites_list.clear()
             for expr in char_info.get("sprites", {}).keys():
@@ -1943,7 +2287,6 @@ class VisualNovelEditor(QMainWindow):
             
         bg_lib[new_name] = bg_path
         
-        # Refresh list item
         self.is_updating_ui = True
         curr_row = self.bg_lib_list.currentRow()
         list_item = self.bg_lib_list.item(curr_row)
@@ -1959,6 +2302,154 @@ class VisualNovelEditor(QMainWindow):
         )
         if file_path:
             self.bg_path_input.setText(file_path)
+
+    # Music Library actions
+    def add_music_lib(self):
+        name, ok = QInputDialog.getText(self, "Добавить BGM", "Название композиции (например: Главная Тема):")
+        if not ok or not name.strip(): return
+        
+        music_name = name.strip()
+        music_lib = self.project_data["config"].get("music", {})
+        if music_name in music_lib:
+            QMessageBox.warning(self, "Ошибка", "Аудио с таким названием уже есть.")
+            return
+            
+        music_lib[music_name] = ""
+        self.refresh_assets_tab_lists()
+        
+        row = list(music_lib.keys()).index(music_name)
+        self.music_lib_list.setCurrentRow(row)
+        self.refresh_bgm_combo_list()
+        
+    def delete_music_lib(self):
+        if not self.selected_music_lib_name: return
+        confirm = QMessageBox.question(self, "Удаление", f"Удалить композицию '{self.selected_music_lib_name}'?")
+        if confirm == QMessageBox.Yes:
+            music_lib = self.project_data["config"].get("music", {})
+            del music_lib[self.selected_music_lib_name]
+            self.selected_music_lib_name = None
+            self.refresh_assets_tab_lists()
+            self.refresh_bgm_combo_list()
+            
+    def music_lib_selected(self, index):
+        if index < 0 or self.is_updating_ui: return
+        self.selected_music_lib_name = list(self.project_data["config"]["music"].keys())[index]
+        
+        self.is_updating_ui = True
+        music_lib = self.project_data["config"].get("music", {})
+        self.music_name_input.setText(self.selected_music_lib_name)
+        self.music_path_input.setText(music_lib.get(self.selected_music_lib_name, ""))
+        self.music_props_widget.show()
+        self.is_updating_ui = False
+        
+    def music_lib_field_changed(self):
+        if self.is_updating_ui or not self.selected_music_lib_name: return
+        music_lib = self.project_data["config"].get("music", {})
+        
+        old_name = self.selected_music_lib_name
+        new_name = self.music_name_input.text().strip()
+        m_path = self.music_path_input.text().strip()
+        
+        if not new_name: return
+        
+        if old_name != new_name:
+            if new_name in music_lib:
+                QMessageBox.warning(self, "Ошибка", "Название BGM должно быть уникальным.")
+                return
+            del music_lib[old_name]
+            self.selected_music_lib_name = new_name
+            
+        music_lib[new_name] = m_path
+        
+        self.is_updating_ui = True
+        curr_row = self.music_lib_list.currentRow()
+        list_item = self.music_lib_list.item(curr_row)
+        if list_item:
+            list_item.setText(new_name)
+        self.is_updating_ui = False
+        self.refresh_bgm_combo_list()
+        
+    def browse_music_lib_path(self):
+        if not self.selected_music_lib_name: return
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Выбрать файл фоновой музыки", "", "Аудио (*.mp3 *.ogg *.wav)"
+        )
+        if file_path:
+            self.music_path_input.setText(file_path)
+
+    # SFX Library actions
+    def add_sfx_lib(self):
+        name, ok = QInputDialog.getText(self, "Добавить SFX", "Название эффекта (например: Стук в дверь):")
+        if not ok or not name.strip(): return
+        
+        sfx_name = name.strip()
+        sfx_lib = self.project_data["config"].get("sfx", {})
+        if sfx_name in sfx_lib:
+            QMessageBox.warning(self, "Ошибка", "SFX с таким названием уже есть.")
+            return
+            
+        sfx_lib[sfx_name] = ""
+        self.refresh_assets_tab_lists()
+        
+        row = list(sfx_lib.keys()).index(sfx_name)
+        self.sfx_lib_list.setCurrentRow(row)
+        self.refresh_sfx_combo_list()
+        
+    def delete_sfx_lib(self):
+        if not self.selected_sfx_lib_name: return
+        confirm = QMessageBox.question(self, "Удаление", f"Удалить эффект '{self.selected_sfx_lib_name}'?")
+        if confirm == QMessageBox.Yes:
+            sfx_lib = self.project_data["config"].get("sfx", {})
+            del sfx_lib[self.selected_sfx_lib_name]
+            self.selected_sfx_lib_name = None
+            self.refresh_assets_tab_lists()
+            self.refresh_sfx_combo_list()
+            
+    def sfx_lib_selected(self, index):
+        if index < 0 or self.is_updating_ui: return
+        self.selected_sfx_lib_name = list(self.project_data["config"]["sfx"].keys())[index]
+        
+        self.is_updating_ui = True
+        sfx_lib = self.project_data["config"].get("sfx", {})
+        self.sfx_name_input.setText(self.selected_sfx_lib_name)
+        self.sfx_path_input.setText(sfx_lib.get(self.selected_sfx_lib_name, ""))
+        self.sfx_props_widget.show()
+        self.is_updating_ui = False
+        
+    def sfx_lib_field_changed(self):
+        if self.is_updating_ui or not self.selected_sfx_lib_name: return
+        sfx_lib = self.project_data["config"].get("sfx", {})
+        
+        old_name = self.selected_sfx_lib_name
+        new_name = self.sfx_name_input.text().strip()
+        s_path = self.sfx_path_input.text().strip()
+        
+        if not new_name: return
+        
+        if old_name != new_name:
+            if new_name in sfx_lib:
+                QMessageBox.warning(self, "Ошибка", "Название SFX должно быть уникальным.")
+                return
+            del sfx_lib[old_name]
+            self.selected_sfx_lib_name = new_name
+            
+        sfx_lib[new_name] = s_path
+        
+        self.is_updating_ui = True
+        curr_row = self.sfx_lib_list.currentRow()
+        list_item = self.sfx_lib_list.item(curr_row)
+        if list_item:
+            list_item.setText(new_name)
+        self.is_updating_ui = False
+        self.refresh_sfx_combo_list()
+        
+    def browse_sfx_lib_path(self):
+        if not self.selected_sfx_lib_name: return
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Выбрать файл звукового эффекта", "", "Аудио (*.mp3 *.ogg *.wav)"
+        )
+        if file_path:
+            self.sfx_path_input.setText(file_path)
 
 
 if __name__ == "__main__":

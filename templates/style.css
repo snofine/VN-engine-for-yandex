@@ -72,8 +72,22 @@ body {
     height: 100%;
     background-size: cover;
     background-position: center;
-    transition: background-image 0.5s ease-in-out;
+    transition: background-image 0.5s ease-in-out, background-color 0.5s ease-in-out, opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
     z-index: 1;
+}
+
+.transition-fade-out {
+    opacity: 0;
+}
+
+.transition-slide-out {
+    transform: translateX(-100%);
+    opacity: 0;
+}
+
+.transition-zoom-out {
+    transform: scale(1.15);
+    opacity: 0;
 }
 
 /* Character Sprites Layer */
