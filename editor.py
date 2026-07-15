@@ -145,11 +145,6 @@ QScrollBar:vertical {
     width: 10px;
     margin: 0px;
 }
-QScrollBar::handle:vertical {
-    background: #2d2d42;
-    min-height: 20px;
-    border-radius: 5px;
-}
 QScrollBar::handle:vertical:hover {
     background: #ffcc00;
 }
@@ -230,7 +225,7 @@ class VisualNovelEditor(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("myvn - No-Code GUI Конструктор Визуальных Новелл (Яндекс Игры)")
-        self.resize(1200, 850)
+        self.resize(1300, 900)
         self.setStyleSheet(DARK_THEME_STYLE)
         
         # State
@@ -242,7 +237,9 @@ class VisualNovelEditor(QMainWindow):
                 "ads_interval_minutes": 3,
                 "inapp_remove_ads_id": "no_ads_30rub",
                 "export_dir": "",
-                "gui_profile": "Дефолтный"
+                "gui_profile": "Дефолтный",
+                "characters": {},
+                "backgrounds": {}
             },
             "gui": dict(GUI_PRESETS["Дефолтный"]),
             "scenes": {}
@@ -251,6 +248,11 @@ class VisualNovelEditor(QMainWindow):
         self.selected_scene_id = None
         self.selected_dialogue_idx = None
         self.selected_choice_idx = None
+        
+        self.selected_char_id = None
+        self.selected_char_sprite_idx = None
+        self.selected_bg_lib_name = None
+        
         self.is_updating_ui = False # Guard to prevent update recursion
         
         self.init_ui()
@@ -296,7 +298,6 @@ class VisualNovelEditor(QMainWindow):
         self.scene_list.currentRowChanged.connect(self.scene_selected)
         left_layout.addWidget(self.scene_list)
         
-        # Scene buttons layout
         scene_btns_layout = QHBoxLayout()
         add_scene_btn = QPushButton("➕ Добавить")
         add_scene_btn.clicked.connect(self.add_scene)
@@ -314,7 +315,7 @@ class VisualNovelEditor(QMainWindow):
         
         main_splitter.addWidget(left_panel)
         
-        # Right Panel: Tabs for Editor and settings
+        # Right Panel: Tabs
         right_tab_widget = QTabWidget()
         main_splitter.addWidget(right_tab_widget)
         
@@ -325,14 +326,20 @@ class VisualNovelEditor(QMainWindow):
         # Scene properties (Background)
         bg_group = QGroupBox("Задний фон сцены")
         bg_layout = QHBoxLayout(bg_group)
+        
+        # Background Dropdown mapping to library
+        self.scene_bg_combo = QComboBox()
+        self.scene_bg_combo.currentIndexChanged.connect(self.scene_bg_combo_changed)
+        bg_layout.addWidget(self.scene_bg_combo)
+        
         self.bg_input = QLineEdit()
-        self.bg_input.setPlaceholderText("Путь к файлу картинки или HEX-код цвета (#14141f)")
+        self.bg_input.setPlaceholderText("Цвет или файл...")
         self.bg_input.textChanged.connect(self.update_scene_bg)
         bg_layout.addWidget(self.bg_input)
         
-        bg_browse_btn = QPushButton("Выбрать файл")
-        bg_browse_btn.clicked.connect(self.browse_bg_image)
-        bg_layout.addWidget(bg_browse_btn)
+        self.bg_browse_btn = QPushButton("Выбрать файл")
+        self.bg_browse_btn.clicked.connect(self.browse_bg_image)
+        bg_layout.addWidget(self.bg_browse_btn)
         scene_editor_layout.addWidget(bg_group)
         
         # Dialogue steps splitter
@@ -383,27 +390,53 @@ class VisualNovelEditor(QMainWindow):
         diag_detail_panel = QGroupBox("Редактор реплики")
         diag_detail_layout = QFormLayout(diag_detail_panel)
         
+        # thoughts / formatting
+        format_layout = QHBoxLayout()
+        self.diag_is_thought = QCheckBox("💭 Мысли")
+        self.diag_is_thought.stateChanged.connect(self.diag_is_thought_changed)
+        format_layout.addWidget(self.diag_is_thought)
+        
+        self.diag_text_bold = QCheckBox("<b>Ж</b>")
+        self.diag_text_bold.stateChanged.connect(self.save_current_dialogue_fields)
+        format_layout.addWidget(self.diag_text_bold)
+        
+        self.diag_text_italic = QCheckBox("<i>К</i>")
+        self.diag_text_italic.stateChanged.connect(self.save_current_dialogue_fields)
+        format_layout.addWidget(self.diag_text_italic)
+        diag_detail_layout.addRow("Формат реплики:", format_layout)
+        
+        # Character picker combo
+        self.diag_char_combo = QComboBox()
+        self.diag_char_combo.currentIndexChanged.connect(self.diag_char_combo_changed)
+        diag_detail_layout.addRow("Персонаж:", self.diag_char_combo)
+        
         self.speaker_input = QLineEdit()
         self.speaker_input.setPlaceholderText("Имя говорящего персонажа")
         self.speaker_input.textChanged.connect(self.save_current_dialogue_fields)
-        diag_detail_layout.addRow("Имя:", self.speaker_input)
+        diag_detail_layout.addRow("Имя спикера:", self.speaker_input)
         
         self.text_input = QTextEdit()
-        self.text_input.setPlaceholderText("Текст, который отобразится на экране новеллы...")
+        self.text_input.setPlaceholderText("Текст, который отобразится на экране...")
         self.text_input.textChanged.connect(self.save_current_dialogue_fields)
         diag_detail_layout.addRow("Текст реплики:", self.text_input)
         
-        # Sprite settings
-        sprite_layout = QHBoxLayout()
-        self.sprite_input = QLineEdit()
-        self.sprite_input.setPlaceholderText("Файл спрайта (.png)")
-        self.sprite_input.textChanged.connect(self.save_current_dialogue_fields)
-        sprite_layout.addWidget(self.sprite_input)
+        # Sprite picker combo (Expressions list)
+        self.diag_sprite_expr_combo = QComboBox()
+        self.diag_sprite_expr_combo.currentIndexChanged.connect(self.diag_sprite_expr_changed)
+        diag_detail_layout.addRow("Эмоция спрайта:", self.diag_sprite_expr_combo)
         
+        # Raw Sprite path input
+        self.sprite_raw_widget = QWidget()
+        sprite_raw_layout = QHBoxLayout(self.sprite_raw_widget)
+        sprite_raw_layout.setContentsMargins(0, 0, 0, 0)
+        self.sprite_input = QLineEdit()
+        self.sprite_input.setPlaceholderText("Путь к файлу...")
+        self.sprite_input.textChanged.connect(self.save_current_dialogue_fields)
+        sprite_raw_layout.addWidget(self.sprite_input)
         sprite_browse = QPushButton("Обзор")
         sprite_browse.clicked.connect(self.browse_sprite_image)
-        sprite_layout.addWidget(sprite_browse)
-        diag_detail_layout.addRow("Спрайт перс.:", sprite_layout)
+        sprite_raw_layout.addWidget(sprite_browse)
+        diag_detail_layout.addRow("Файл спрайта:", self.sprite_raw_widget)
         
         self.sprite_pos_type = QComboBox()
         self.sprite_pos_type.addItems(["Предустановка", "Координаты X, Y (%)"])
@@ -436,7 +469,6 @@ class VisualNovelEditor(QMainWindow):
         # Choices details panel
         choices_panel = QGroupBox("Выборы / Переходы")
         choices_layout = QVBoxLayout(choices_panel)
-        
         choices_layout.addWidget(QLabel("<b>Варианты выбора в конце сцены:</b>"))
         
         self.choices_list = QListWidget()
@@ -454,7 +486,6 @@ class VisualNovelEditor(QMainWindow):
         choices_ctrl_layout.addWidget(del_choice_btn)
         choices_layout.addLayout(choices_ctrl_layout)
         
-        # Active Choice Editor
         self.choice_text_input = QLineEdit()
         self.choice_text_input.setPlaceholderText("Текст на кнопке выбора")
         self.choice_text_input.textChanged.connect(self.save_choice_fields)
@@ -464,7 +495,6 @@ class VisualNovelEditor(QMainWindow):
         self.choice_target_combo.currentIndexChanged.connect(self.save_choice_fields)
         choices_layout.addWidget(self.choice_target_combo)
         
-        # Jump target if no choices
         choices_layout.addWidget(QFrame(frameShape=QFrame.HLine))
         choices_layout.addWidget(QLabel("<b>Или автоматический переход:</b>"))
         
@@ -476,7 +506,130 @@ class VisualNovelEditor(QMainWindow):
         
         right_tab_widget.addTab(scene_editor_tab, "🎬 Редактор Сцен")
         
-        # TAB 2: MONETIZATION SETTINGS
+        # TAB 2: ASSETS LIBRARY (NEW)
+        assets_tab = QWidget()
+        assets_layout = QHBoxLayout(assets_tab)
+        assets_layout.setContentsMargins(10, 10, 10, 10)
+        
+        assets_splitter = QSplitter(Qt.Horizontal)
+        assets_layout.addWidget(assets_splitter)
+        
+        # Left Panel: Characters Library
+        char_lib_widget = QGroupBox("👥 Библиотека Персонажей")
+        char_lib_layout = QVBoxLayout(char_lib_widget)
+        
+        self.char_lib_list = QListWidget()
+        self.char_lib_list.currentRowChanged.connect(self.character_selected)
+        char_lib_layout.addWidget(self.char_lib_list)
+        
+        char_btns = QHBoxLayout()
+        add_char_btn = QPushButton("➕ Персонажа")
+        add_char_btn.clicked.connect(self.add_character)
+        char_btns.addWidget(add_char_btn)
+        del_char_btn = QPushButton("❌ Удалить")
+        del_char_btn.setObjectName("danger-btn")
+        del_char_btn.clicked.connect(self.delete_character)
+        char_btns.addWidget(del_char_btn)
+        char_lib_layout.addLayout(char_btns)
+        
+        # Character properties panel
+        self.char_props_panel = QWidget()
+        char_props_layout = QFormLayout(self.char_props_panel)
+        char_props_layout.setContentsMargins(0, 5, 0, 0)
+        
+        self.char_name_input = QLineEdit()
+        self.char_name_input.textChanged.connect(self.char_field_changed)
+        char_props_layout.addRow("Имя:", self.char_name_input)
+        
+        self.char_color_input = QLineEdit()
+        self.char_color_input.textChanged.connect(self.char_field_changed)
+        char_color_btn = QPushButton("Цвет")
+        char_color_btn.clicked.connect(lambda: self.choose_color(self.char_color_input))
+        char_color_lay = QHBoxLayout()
+        char_color_lay.addWidget(self.char_color_input)
+        char_color_lay.addWidget(char_color_btn)
+        char_props_layout.addRow("Цвет имени:", char_color_lay)
+        
+        # Sprites list for character
+        char_props_layout.addRow(QLabel("<b>Эмоции / Спрайты персонажа:</b>"))
+        self.char_sprites_list = QListWidget()
+        self.char_sprites_list.currentRowChanged.connect(self.char_sprite_selected)
+        char_props_layout.addRow(self.char_sprites_list)
+        
+        sprite_btns = QHBoxLayout()
+        add_sprite_btn = QPushButton("➕ Спрайт")
+        add_sprite_btn.clicked.connect(self.add_char_sprite)
+        sprite_btns.addWidget(add_sprite_btn)
+        del_sprite_btn = QPushButton("❌ Спрайт")
+        del_sprite_btn.setObjectName("danger-btn")
+        del_sprite_btn.clicked.connect(self.delete_char_sprite)
+        sprite_btns.addWidget(del_sprite_btn)
+        char_props_layout.addRow(sprite_btns)
+        
+        self.sprite_name_input = QLineEdit()
+        self.sprite_name_input.setPlaceholderText("Название (например: Радость)")
+        self.sprite_name_input.textChanged.connect(self.char_sprite_field_changed)
+        char_props_layout.addRow("Название:", self.sprite_name_input)
+        
+        self.sprite_path_input = QLineEdit()
+        self.sprite_path_input.textChanged.connect(self.char_sprite_field_changed)
+        sprite_path_browse = QPushButton("Обзор")
+        sprite_path_browse.clicked.connect(self.browse_char_sprite_path)
+        sprite_path_lay = QHBoxLayout()
+        sprite_path_lay.addWidget(self.sprite_path_input)
+        sprite_path_lay.addWidget(sprite_path_browse)
+        char_props_layout.addRow("Путь к файлу:", sprite_path_lay)
+        
+        char_lib_layout.addWidget(self.char_props_panel)
+        self.char_props_panel.hide()
+        
+        assets_splitter.addWidget(char_lib_widget)
+        
+        # Right Panel: Backgrounds Library
+        bg_lib_widget = QGroupBox("🖼 Библиотека Фонов")
+        bg_lib_layout = QVBoxLayout(bg_lib_widget)
+        
+        self.bg_lib_list = QListWidget()
+        self.bg_lib_list.currentRowChanged.connect(self.bg_lib_selected)
+        bg_lib_layout.addWidget(self.bg_lib_list)
+        
+        bg_btns = QHBoxLayout()
+        add_bg_btn = QPushButton("➕ Добавить фон")
+        add_bg_btn.clicked.connect(self.add_bg_lib)
+        bg_btns.addWidget(add_bg_btn)
+        del_bg_btn = QPushButton("❌ Удалить фон")
+        del_bg_btn.setObjectName("danger-btn")
+        del_bg_btn.clicked.connect(self.delete_bg_lib)
+        bg_btns.addWidget(del_bg_btn)
+        bg_lib_layout.addLayout(bg_btns)
+        
+        # Background properties panel
+        self.bg_props_panel = QWidget()
+        bg_props_lay = QFormLayout(self.bg_props_panel)
+        bg_props_lay.setContentsMargins(0, 5, 0, 0)
+        
+        self.bg_name_input = QLineEdit()
+        self.bg_name_input.textChanged.connect(self.bg_lib_field_changed)
+        bg_props_lay.addRow("Название:", self.bg_name_input)
+        
+        self.bg_path_input = QLineEdit()
+        self.bg_path_input.textChanged.connect(self.bg_lib_field_changed)
+        bg_path_browse = QPushButton("Обзор")
+        bg_path_browse.clicked.connect(self.browse_bg_lib_path)
+        bg_path_lay = QHBoxLayout()
+        bg_path_lay.addWidget(self.bg_path_input)
+        bg_path_lay.addWidget(bg_path_browse)
+        bg_props_lay.addRow("Файл фона:", bg_path_lay)
+        
+        bg_lib_layout.addWidget(self.bg_props_panel)
+        self.bg_props_panel.hide()
+        
+        assets_splitter.addWidget(bg_lib_widget)
+        assets_splitter.setSizes([650, 650])
+        
+        right_tab_widget.addTab(assets_tab, "📦 Библиотека Ассетов")
+        
+        # TAB 3: MONETIZATION SETTINGS
         monetization_tab = QWidget()
         monetization_layout = QVBoxLayout(monetization_tab)
         monetization_layout.setContentsMargins(20, 20, 20, 20)
@@ -518,7 +671,7 @@ class VisualNovelEditor(QMainWindow):
         
         right_tab_widget.addTab(monetization_tab, "💰 Настройки Монетизации")
         
-        # TAB 3: GUI CUSTOMIZATION (NEW)
+        # TAB 4: GUI CUSTOMIZATION
         gui_tab = QWidget()
         gui_layout = QVBoxLayout(gui_tab)
         gui_layout.setContentsMargins(20, 20, 20, 20)
@@ -531,12 +684,10 @@ class VisualNovelEditor(QMainWindow):
         profile_form.addRow("Текущий профиль GUI:", self.gui_profile_combo)
         gui_layout.addWidget(profile_group)
         
-        # Custom elements group
         self.gui_custom_group = QGroupBox("Параметры кастомизации интерфейса")
         self.gui_custom_layout = QFormLayout(self.gui_custom_group)
         self.gui_custom_layout.setSpacing(10)
         
-        # Panel Height
         self.gui_dialogue_height = QSpinBox()
         self.gui_dialogue_height.setRange(100, 350)
         self.gui_dialogue_height.setValue(180)
@@ -544,7 +695,6 @@ class VisualNovelEditor(QMainWindow):
         self.gui_dialogue_height.valueChanged.connect(self.gui_field_changed)
         self.gui_custom_layout.addRow("Высота панели диалога:", self.gui_dialogue_height)
         
-        # Dialogue Panel BG Color
         self.gui_panel_bg = QLineEdit()
         self.gui_panel_bg.textChanged.connect(self.gui_field_changed)
         panel_bg_btn = QPushButton("Цвет")
@@ -554,7 +704,6 @@ class VisualNovelEditor(QMainWindow):
         panel_bg_layout.addWidget(panel_bg_btn)
         self.gui_custom_layout.addRow("Фон панели (rgba/hex):", panel_bg_layout)
         
-        # Dialogue Panel Border Color
         self.gui_panel_border = QLineEdit()
         self.gui_panel_border.textChanged.connect(self.gui_field_changed)
         panel_border_btn = QPushButton("Цвет")
@@ -564,7 +713,6 @@ class VisualNovelEditor(QMainWindow):
         panel_border_layout.addWidget(panel_border_btn)
         self.gui_custom_layout.addRow("Рамка панели (rgba/hex):", panel_border_layout)
         
-        # Dialogue Panel Border Radius
         self.gui_panel_radius = QSpinBox()
         self.gui_panel_radius.setRange(0, 50)
         self.gui_panel_radius.setValue(12)
@@ -572,7 +720,6 @@ class VisualNovelEditor(QMainWindow):
         self.gui_panel_radius.valueChanged.connect(self.gui_field_changed)
         self.gui_custom_layout.addRow("Скругление углов панели:", self.gui_panel_radius)
         
-        # Text settings
         self.gui_text_color = QLineEdit()
         self.gui_text_color.textChanged.connect(self.gui_field_changed)
         text_color_btn = QPushButton("Цвет")
@@ -589,7 +736,6 @@ class VisualNovelEditor(QMainWindow):
         self.gui_text_size.valueChanged.connect(self.gui_field_changed)
         self.gui_custom_layout.addRow("Размер текста реплик:", self.gui_text_size)
         
-        # Speaker Name settings
         self.gui_name_color = QLineEdit()
         self.gui_name_color.textChanged.connect(self.gui_field_changed)
         name_color_btn = QPushButton("Цвет")
@@ -611,7 +757,6 @@ class VisualNovelEditor(QMainWindow):
         self.gui_name_bold.stateChanged.connect(self.gui_field_changed)
         self.gui_custom_layout.addRow("Стиль имени:", self.gui_name_bold)
         
-        # Choice Buttons settings
         self.gui_choice_bg = QLineEdit()
         self.gui_choice_bg.textChanged.connect(self.gui_field_changed)
         choice_bg_btn = QPushButton("Цвет")
@@ -665,7 +810,7 @@ class VisualNovelEditor(QMainWindow):
         
         right_tab_widget.addTab(gui_tab, "🎨 Настройки GUI")
         
-        # TAB 4: PROJECT SETTINGS
+        # TAB 5: PROJECT SETTINGS
         settings_tab = QWidget()
         settings_layout = QVBoxLayout(settings_tab)
         settings_layout.setContentsMargins(20, 20, 20, 20)
@@ -707,7 +852,20 @@ class VisualNovelEditor(QMainWindow):
                 "ads_interval_minutes": 3,
                 "inapp_remove_ads_id": "no_ads_30rub",
                 "export_dir": "F:\\myvn\\export",
-                "gui_profile": "Дефолтный"
+                "gui_profile": "Дефолтный",
+                "characters": {
+                    "alisa": {
+                        "name": "Алиса",
+                        "color": "#ff007f",
+                        "sprites": {
+                            "Улыбка": "https://img.icons8.com/color/344/anime-emoji.png"
+                        }
+                    }
+                },
+                "backgrounds": {
+                    "Город": "#2c3e50",
+                    "Лес": "#0b2611"
+                }
             },
             "gui": dict(GUI_PRESETS["Дефолтный"]),
             "scenes": {
@@ -715,9 +873,13 @@ class VisualNovelEditor(QMainWindow):
                     "background": "#14141f",
                     "dialogues": [
                         {
+                            "character_id": "alisa",
                             "speaker": "Алиса",
                             "text": "Привет! Это твоя первая сцена.",
-                            "sprite": {"position": "center", "image": ""}
+                            "is_thought": False,
+                            "text_bold": False,
+                            "text_italic": False,
+                            "sprite": {"position": "center", "image": "https://img.icons8.com/color/344/anime-emoji.png"}
                         }
                     ],
                     "choices": [],
@@ -739,15 +901,19 @@ class VisualNovelEditor(QMainWindow):
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             
-            # Simple validation
             if "config" not in data or "scenes" not in data:
                 raise ValueError("Некорректный формат файла проекта.")
+            
+            # Upgrade keys for old files if they are missing
+            if "characters" not in data["config"]:
+                data["config"]["characters"] = {}
+            if "backgrounds" not in data["config"]:
+                data["config"]["backgrounds"] = {}
                 
             self.project_path = file_path
             self.project_data = data
             self.refresh_all_ui()
             
-            # Select start scene or first scene
             start_scene = self.project_data["config"].get("start_scene", "")
             if start_scene in self.project_data["scenes"]:
                 idx = list(self.project_data["scenes"].keys()).index(start_scene)
@@ -829,7 +995,6 @@ class VisualNovelEditor(QMainWindow):
             QMessageBox.warning(self, "Внимание", "Пожалуйста, укажите папку экспорта.")
             return
             
-        # Run export
         ok, msg = export_project(self.project_data, export_dir)
         if ok:
             QMessageBox.information(self, "Экспорт Завершен", msg)
@@ -875,6 +1040,9 @@ class VisualNovelEditor(QMainWindow):
         else:
             self.set_gui_fields_enabled(False)
             
+        # Refresh Assets Tab lists
+        self.refresh_assets_tab_lists()
+        
         # Refresh Scene list
         self.refresh_scene_list()
         
@@ -894,6 +1062,7 @@ class VisualNovelEditor(QMainWindow):
         self.refresh_scene_comboboxes()
         
     def refresh_scene_comboboxes(self):
+        # Temp save selections
         curr_choice_target = self.choice_target_combo.currentText()
         curr_next_scene = self.next_scene_combo.currentText()
         
@@ -912,6 +1081,12 @@ class VisualNovelEditor(QMainWindow):
         
         idx = self.next_scene_combo.findText(curr_next_scene)
         if idx >= 0: self.next_scene_combo.setCurrentIndex(idx)
+        
+        # Refresh Backgrounds combo from library
+        self.refresh_bg_combo_list()
+        
+        # Refresh Character combos in dialogue panel
+        self.refresh_dialogue_char_combos()
 
     # GUI Profile handlers
     def gui_profile_changed(self, index):
@@ -923,7 +1098,6 @@ class VisualNovelEditor(QMainWindow):
             self.load_gui_fields(preset_data)
             self.is_updating_ui = False
             self.set_gui_fields_enabled(False)
-            # Override project gui dictionary with preset clone
             self.project_data["gui"] = dict(preset_data)
         else:
             self.set_gui_fields_enabled(True)
@@ -933,7 +1107,6 @@ class VisualNovelEditor(QMainWindow):
     def gui_field_changed(self):
         if self.is_updating_ui:
             return
-        # If user edits fields in custom mode, we sync it
         if self.gui_profile_combo.currentText() == "Пользовательский":
             self.sync_config_from_ui()
 
@@ -983,14 +1156,12 @@ class VisualNovelEditor(QMainWindow):
 
     def choose_color(self, line_edit):
         current_color_str = line_edit.text().strip()
-        # Parse rgb/rgba or hex for QColorDialog initializer if possible
         init_color = QColor("#ffcc00")
         if current_color_str.startswith("#"):
             init_color = QColor(current_color_str)
             
         color = QColorDialog.getColor(init_color, self, "Выберите цвет")
         if color.isValid():
-            # If current string was rgba, output as rgba, otherwise hex
             if current_color_str.startswith("rgba") or "," in current_color_str:
                 line_edit.setText(f"rgba({color.red()}, {color.green()}, {color.blue()}, 0.8)")
             else:
@@ -1085,14 +1256,41 @@ class VisualNovelEditor(QMainWindow):
         self.is_updating_ui = True
         scene = self.project_data["scenes"][self.selected_scene_id]
         
-        self.bg_input.setText(scene.get("background", ""))
+        # Match scene background combo selection
+        scene_bg = scene.get("background", "")
+        self.bg_input.setText(scene_bg)
         
+        # Populate backgrounds combobox
+        self.refresh_bg_combo_list()
+        
+        # Try to find if this path matches a library background
+        found_bg = False
+        bg_lib = self.project_data["config"].get("backgrounds", {})
+        for name, path in bg_lib.items():
+            if path == scene_bg:
+                bg_idx = self.scene_bg_combo.findText(name)
+                if bg_idx >= 0:
+                    self.scene_bg_combo.setCurrentIndex(bg_idx)
+                    self.bg_input.hide()
+                    self.bg_browse_btn.hide()
+                    found_bg = True
+                    break
+        if not found_bg:
+            self.scene_bg_combo.setCurrentIndex(0) # [Вручную / Цвет]
+            self.bg_input.show()
+            self.bg_browse_btn.show()
+        
+        # Populate Dialogues list
         self.dialogue_list.clear()
         for idx, diag in enumerate(scene.get("dialogues", [])):
             text_preview = diag.get("text", "")[:30] + "..." if len(diag.get("text", "")) > 30 else diag.get("text", "")
             speaker = diag.get("speaker", "Без имени")
-            self.dialogue_list.addItem(f"{idx+1}. [{speaker}] {text_preview}")
+            if diag.get("is_thought"):
+                self.dialogue_list.addItem(f"{idx+1}. 💭 ({text_preview})")
+            else:
+                self.dialogue_list.addItem(f"{idx+1}. [{speaker}] {text_preview}")
             
+        # Populate Choices list
         self.choices_list.clear()
         for idx, choice in enumerate(scene.get("choices", [])):
             self.choices_list.addItem(f"Выбор: {choice.get('text')} -> {choice.get('next_scene')}")
@@ -1123,6 +1321,23 @@ class VisualNovelEditor(QMainWindow):
         )
         if file_path:
             self.bg_input.setText(file_path)
+            
+    def scene_bg_combo_changed(self, index):
+        if self.is_updating_ui or not self.selected_scene_id: return
+        
+        bg_name = self.scene_bg_combo.currentText()
+        if bg_name == "[Вручную / Цвет]":
+            self.bg_input.show()
+            self.bg_browse_btn.show()
+        else:
+            self.bg_input.hide()
+            self.bg_browse_btn.hide()
+            
+            # Load library path
+            bg_lib = self.project_data["config"].get("backgrounds", {})
+            bg_path = bg_lib.get(bg_name, "")
+            self.bg_input.setText(bg_path)
+            self.update_scene_bg(bg_path)
 
     # Dialogue steps CRUD & Edit
     def add_dialogue(self):
@@ -1130,8 +1345,12 @@ class VisualNovelEditor(QMainWindow):
         scene = self.project_data["scenes"][self.selected_scene_id]
         
         new_step = {
-            "speaker": "Алиса" if len(scene["dialogues"]) > 0 else "Рассказчик",
+            "character_id": "",
+            "speaker": "Рассказчик",
             "text": "Новая реплика диалога...",
+            "is_thought": False,
+            "text_bold": False,
+            "text_italic": False,
             "sprite": {"position": "center", "image": ""}
         }
         scene["dialogues"].append(new_step)
@@ -1154,15 +1373,51 @@ class VisualNovelEditor(QMainWindow):
         self.is_updating_ui = True
         step = self.project_data["scenes"][self.selected_scene_id]["dialogues"][index]
         
+        # Load formatting
+        self.diag_is_thought.setChecked(step.get("is_thought", False))
+        self.diag_text_bold.setChecked(step.get("text_bold", False))
+        self.diag_text_italic.setChecked(step.get("text_italic", False))
+        
+        # Populate character combos
+        self.refresh_dialogue_char_combos()
+        
+        char_id = step.get("character_id", "")
+        if char_id:
+            c_idx = self.diag_char_combo.findData(char_id)
+            if c_idx >= 0:
+                self.diag_char_combo.setCurrentIndex(c_idx)
+        else:
+            self.diag_char_combo.setCurrentIndex(0) # [Без персонажа / Рассказчик]
+            
         self.speaker_input.setText(step.get("speaker", ""))
         self.text_input.setPlainText(step.get("text", ""))
         
+        # Populate sprites expressions combos
+        self.refresh_dialogue_sprite_expr_combo()
+        
         sprite = step.get("sprite", {})
         if sprite:
-            self.sprite_input.setText(sprite.get("image", ""))
-            pos = sprite.get("position", "center")
+            img_path = sprite.get("image", "")
+            self.sprite_input.setText(img_path)
             
-            # Check if position is an array/list of X, Y
+            # Try to match to character sprite expression
+            matched_expr = False
+            if char_id and char_id in self.project_data["config"]["characters"]:
+                char_info = self.project_data["config"]["characters"][char_id]
+                sprites_map = char_info.get("sprites", {})
+                for expr, expr_path in sprites_map.items():
+                    if expr_path == img_path:
+                        expr_idx = self.diag_sprite_expr_combo.findText(expr)
+                        if expr_idx >= 0:
+                            self.diag_sprite_expr_combo.setCurrentIndex(expr_idx)
+                            self.sprite_raw_widget.hide()
+                            matched_expr = True
+                            break
+            if not matched_expr:
+                self.diag_sprite_expr_combo.setCurrentIndex(0) # [Вручную / Путь]
+                self.sprite_raw_widget.show()
+                
+            pos = sprite.get("position", "center")
             if isinstance(pos, list):
                 self.sprite_pos_type.setCurrentIndex(1) # Координаты X, Y (%)
                 x = int(pos[0]) if len(pos) > 0 else 50
@@ -1172,9 +1427,8 @@ class VisualNovelEditor(QMainWindow):
                 self.sprite_pos_combo.hide()
                 self.sprite_x_coord.show()
                 self.sprite_y_coord.show()
-            # Check if position is a single numeric value (X only)
             elif isinstance(pos, (int, float)) or (isinstance(pos, str) and pos.strip().isdigit()):
-                self.sprite_pos_type.setCurrentIndex(1) # Координаты X, Y (%)
+                self.sprite_pos_type.setCurrentIndex(1)
                 self.sprite_x_coord.setValue(int(pos))
                 self.sprite_y_coord.setValue(0)
                 self.sprite_pos_combo.hide()
@@ -1194,7 +1448,10 @@ class VisualNovelEditor(QMainWindow):
             self.sprite_pos_combo.show()
             self.sprite_x_coord.hide()
             self.sprite_y_coord.hide()
+            self.diag_sprite_expr_combo.setCurrentIndex(0)
+            self.sprite_raw_widget.show()
             
+        self.toggle_thought_ui_state()
         self.is_updating_ui = False
         
     def clear_dialogue_fields(self):
@@ -1206,6 +1463,12 @@ class VisualNovelEditor(QMainWindow):
         self.sprite_pos_combo.show()
         self.sprite_x_coord.hide()
         self.sprite_y_coord.hide()
+        self.diag_is_thought.setChecked(False)
+        self.diag_text_bold.setChecked(False)
+        self.diag_text_italic.setChecked(False)
+        self.diag_char_combo.setCurrentIndex(0)
+        self.diag_sprite_expr_combo.setCurrentIndex(0)
+        self.sprite_raw_widget.show()
         
     def save_current_dialogue_fields(self):
         if self.is_updating_ui or not self.selected_scene_id or self.selected_dialogue_idx is None:
@@ -1214,9 +1477,21 @@ class VisualNovelEditor(QMainWindow):
         scene = self.project_data["scenes"][self.selected_scene_id]
         step = scene["dialogues"][self.selected_dialogue_idx]
         
-        step["speaker"] = self.speaker_input.text()
+        step["is_thought"] = self.diag_is_thought.isChecked()
+        step["text_bold"] = self.diag_text_bold.isChecked()
+        step["text_italic"] = self.diag_text_italic.isChecked()
+        
+        # Save character details
+        if step["is_thought"]:
+            step["character_id"] = ""
+            step["speaker"] = ""
+        else:
+            step["character_id"] = self.diag_char_combo.currentData() or ""
+            step["speaker"] = self.speaker_input.text()
+            
         step["text"] = self.text_input.toPlainText()
         
+        # Save sprite details
         sprite_img = self.sprite_input.text()
         
         if self.sprite_pos_type.currentText() == "Координаты X, Y (%)":
@@ -1229,11 +1504,94 @@ class VisualNovelEditor(QMainWindow):
             "image": sprite_img
         }
         
+        # Update list item text
         self.is_updating_ui = True
         text_preview = step["text"][:30] + "..." if len(step["text"]) > 30 else step["text"]
         list_item = self.dialogue_list.item(self.selected_dialogue_idx)
         if list_item:
-            list_item.setText(f"{self.selected_dialogue_idx+1}. [{step['speaker']}] {text_preview}")
+            if step["is_thought"]:
+                list_item.setText(f"{self.selected_dialogue_idx+1}. 💭 ({text_preview})")
+            else:
+                list_item.setText(f"{self.selected_dialogue_idx+1}. [{step['speaker']}] {text_preview}")
+        self.is_updating_ui = False
+
+    def diag_is_thought_changed(self, state):
+        self.toggle_thought_ui_state()
+        self.save_current_dialogue_fields()
+        
+    def toggle_thought_ui_state(self):
+        is_thought = self.diag_is_thought.isChecked()
+        self.diag_char_combo.setDisabled(is_thought)
+        self.speaker_input.setDisabled(is_thought)
+        if is_thought:
+            self.speaker_input.clear()
+
+    def diag_char_combo_changed(self, index):
+        if self.is_updating_ui: return
+        
+        char_id = self.diag_char_combo.currentData()
+        if char_id:
+            # Set default name
+            char_info = self.project_data["config"]["characters"].get(char_id, {})
+            self.speaker_input.setText(char_info.get("name", ""))
+        else:
+            self.speaker_input.clear()
+            
+        # Refresh sprite expressions
+        self.refresh_dialogue_sprite_expr_combo()
+        self.save_current_dialogue_fields()
+        
+    def diag_sprite_expr_changed(self, index):
+        if self.is_updating_ui: return
+        
+        expr_name = self.diag_sprite_expr_combo.currentText()
+        if expr_name == "[Вручную / Путь к файлу]":
+            self.sprite_raw_widget.show()
+        else:
+            self.sprite_raw_widget.hide()
+            # Find and set character sprite path
+            char_id = self.diag_char_combo.currentData()
+            if char_id:
+                char_info = self.project_data["config"]["characters"].get(char_id, {})
+                img_path = char_info.get("sprites", {}).get(expr_name, "")
+                self.sprite_input.setText(img_path)
+                
+        self.save_current_dialogue_fields()
+
+    def refresh_dialogue_char_combos(self):
+        # Temp save selection
+        curr = self.diag_char_combo.currentData()
+        
+        self.is_updating_ui = True
+        self.diag_char_combo.clear()
+        self.diag_char_combo.addItem("[Без персонажа / Рассказчик]", "")
+        
+        chars = self.project_data["config"].get("characters", {})
+        for c_id, c_info in chars.items():
+            self.diag_char_combo.addItem(c_info.get("name", c_id), c_id)
+            
+        idx = self.diag_char_combo.findData(curr)
+        if idx >= 0:
+            self.diag_char_combo.setCurrentIndex(idx)
+        self.is_updating_ui = False
+
+    def refresh_dialogue_sprite_expr_combo(self):
+        curr_expr = self.diag_sprite_expr_combo.currentText()
+        
+        self.is_updating_ui = True
+        self.diag_sprite_expr_combo.clear()
+        self.diag_sprite_expr_combo.addItem("[Вручную / Путь к файлу]")
+        
+        char_id = self.diag_char_combo.currentData()
+        if char_id:
+            char_info = self.project_data["config"]["characters"].get(char_id, {})
+            sprites_map = char_info.get("sprites", {})
+            for expr in sprites_map.keys():
+                self.diag_sprite_expr_combo.addItem(expr)
+                
+        idx = self.diag_sprite_expr_combo.findText(curr_expr)
+        if idx >= 0:
+            self.diag_sprite_expr_combo.setCurrentIndex(idx)
         self.is_updating_ui = False
 
     def browse_sprite_image(self):
@@ -1325,6 +1683,282 @@ class VisualNovelEditor(QMainWindow):
         dir_path = QFileDialog.getExistingDirectory(self, "Выбрать папку экспорта", self.export_dir_input.text())
         if dir_path:
             self.export_dir_input.setText(os.path.abspath(dir_path))
+
+    # ASSETS LIBRARY OPERATIONS (NEW)
+    def refresh_assets_tab_lists(self):
+        self.is_updating_ui = True
+        
+        # Populate character list
+        self.char_lib_list.clear()
+        chars = self.project_data["config"].get("characters", {})
+        for char_id, char_info in chars.items():
+            self.char_lib_list.addItem(QListWidgetItem(f"{char_info.get('name', char_id)} ({char_id})"))
+            
+        # Populate backgrounds list
+        self.bg_lib_list.clear()
+        bgs = self.project_data["config"].get("backgrounds", {})
+        for bg_name in bgs.keys():
+            self.bg_lib_list.addItem(QListWidgetItem(bg_name))
+            
+        # Hide sub-panels
+        self.char_props_panel.hide()
+        self.bg_props_panel.hide()
+        self.selected_char_id = None
+        self.selected_bg_lib_name = None
+        
+        self.is_updating_ui = False
+        
+    def refresh_bg_combo_list(self):
+        curr_selection = self.scene_bg_combo.currentText()
+        
+        self.is_updating_ui = True
+        self.scene_bg_combo.clear()
+        self.scene_bg_combo.addItem("[Вручную / Цвет]")
+        
+        bgs = self.project_data["config"].get("backgrounds", {})
+        for name in bgs.keys():
+            self.scene_bg_combo.addItem(name)
+            
+        idx = self.scene_bg_combo.findText(curr_selection)
+        if idx >= 0:
+            self.scene_bg_combo.setCurrentIndex(idx)
+        self.is_updating_ui = False
+
+    # Character actions
+    def add_character(self):
+        name, ok = QInputDialog.getText(self, "Добавить персонажа", "Укажите ID (латиницей, например: anton):")
+        if not ok or not name.strip(): return
+        
+        char_id = name.strip().lower().replace(" ", "_")
+        if char_id in self.project_data["config"]["characters"]:
+            QMessageBox.warning(self, "Ошибка", "Персонаж с таким ID уже существует.")
+            return
+            
+        display_name, ok2 = QInputDialog.getText(self, "Имя персонажа", "Отображаемое имя:")
+        if not ok2 or not display_name.strip(): return
+        
+        self.project_data["config"]["characters"][char_id] = {
+            "name": display_name.strip(),
+            "color": "#ffffff",
+            "sprites": {}
+        }
+        
+        self.refresh_assets_tab_lists()
+        # Find item index and select it
+        row = list(self.project_data["config"]["characters"].keys()).index(char_id)
+        self.char_lib_list.setCurrentRow(row)
+        self.refresh_scene_comboboxes()
+        
+    def delete_character(self):
+        if not self.selected_char_id: return
+        confirm = QMessageBox.question(self, "Удаление", f"Удалить персонажа '{self.selected_char_id}'?")
+        if confirm == QMessageBox.Yes:
+            del self.project_data["config"]["characters"][self.selected_char_id]
+            self.selected_char_id = None
+            self.refresh_assets_tab_lists()
+            self.refresh_scene_comboboxes()
+            
+    def character_selected(self, index):
+        if index < 0 or self.is_updating_ui: return
+        
+        self.selected_char_id = list(self.project_data["config"]["characters"].keys())[index]
+        self.is_updating_ui = True
+        
+        char_info = self.project_data["config"]["characters"][self.selected_char_id]
+        self.char_name_input.setText(char_info.get("name", ""))
+        self.char_color_input.setText(char_info.get("color", "#ffffff"))
+        
+        # Populate character sprites list
+        self.char_sprites_list.clear()
+        for expr in char_info.get("sprites", {}).keys():
+            self.char_sprites_list.addItem(expr)
+            
+        self.sprite_name_input.clear()
+        self.sprite_path_input.clear()
+        self.selected_char_sprite_idx = None
+        
+        self.char_props_panel.show()
+        self.is_updating_ui = False
+        
+    def char_field_changed(self):
+        if self.is_updating_ui or not self.selected_char_id: return
+        char_info = self.project_data["config"]["characters"][self.selected_char_id]
+        
+        char_info["name"] = self.char_name_input.text()
+        char_info["color"] = self.char_color_input.text()
+        
+        # Update display item in list
+        self.is_updating_ui = True
+        curr_row = self.char_lib_list.currentRow()
+        list_item = self.char_lib_list.item(curr_row)
+        if list_item:
+            list_item.setText(f"{char_info['name']} ({self.selected_char_id})")
+        self.is_updating_ui = False
+        
+        # Update in dialog combo
+        self.refresh_scene_comboboxes()
+        
+    # Character Sprites actions
+    def add_char_sprite(self):
+        if not self.selected_char_id: return
+        name, ok = QInputDialog.getText(self, "Добавить эмоцию", "Назовите эмоцию (например: Злость):")
+        if not ok or not name.strip(): return
+        
+        expr_name = name.strip()
+        char_info = self.project_data["config"]["characters"][self.selected_char_id]
+        if expr_name in char_info.get("sprites", {}):
+            QMessageBox.warning(self, "Ошибка", "Такая эмоция уже создана.")
+            return
+            
+        char_info["sprites"][expr_name] = ""
+        
+        # Refresh
+        self.is_updating_ui = True
+        self.char_sprites_list.addItem(expr_name)
+        self.is_updating_ui = False
+        
+        row = self.char_sprites_list.count() - 1
+        self.char_sprites_list.setCurrentRow(row)
+        self.refresh_scene_comboboxes()
+        
+    def delete_char_sprite(self):
+        if not self.selected_char_id or self.selected_char_sprite_idx is None: return
+        char_info = self.project_data["config"]["characters"][self.selected_char_id]
+        expr_name = self.char_sprites_list.item(self.selected_char_sprite_idx).text()
+        
+        confirm = QMessageBox.question(self, "Удаление", f"Удалить спрайт '{expr_name}'?")
+        if confirm == QMessageBox.Yes:
+            del char_info["sprites"][expr_name]
+            self.selected_char_sprite_idx = None
+            
+            # Refresh list
+            self.is_updating_ui = True
+            self.char_sprites_list.clear()
+            for expr in char_info.get("sprites", {}).keys():
+                self.char_sprites_list.addItem(expr)
+            self.sprite_name_input.clear()
+            self.sprite_path_input.clear()
+            self.is_updating_ui = False
+            self.refresh_scene_comboboxes()
+            
+    def char_sprite_selected(self, index):
+        if index < 0 or self.is_updating_ui: return
+        self.selected_char_sprite_idx = index
+        
+        self.is_updating_ui = True
+        expr_name = self.char_sprites_list.item(index).text()
+        char_info = self.project_data["config"]["characters"][self.selected_char_id]
+        img_path = char_info["sprites"].get(expr_name, "")
+        
+        self.sprite_name_input.setText(expr_name)
+        self.sprite_path_input.setText(img_path)
+        self.is_updating_ui = False
+        
+    def char_sprite_field_changed(self):
+        if self.is_updating_ui or not self.selected_char_id or self.selected_char_sprite_idx is None: return
+        
+        char_info = self.project_data["config"]["characters"][self.selected_char_id]
+        old_name = self.char_sprites_list.item(self.selected_char_sprite_idx).text()
+        new_name = self.sprite_name_input.text().strip()
+        img_path = self.sprite_path_input.text().strip()
+        
+        if not new_name: return
+        
+        if old_name != new_name:
+            if new_name in char_info["sprites"]:
+                QMessageBox.warning(self, "Ошибка", "Название эмоции должно быть уникальным.")
+                return
+            del char_info["sprites"][old_name]
+            
+        char_info["sprites"][new_name] = img_path
+        
+        self.is_updating_ui = True
+        self.char_sprites_list.item(self.selected_char_sprite_idx).setText(new_name)
+        self.is_updating_ui = False
+        self.refresh_scene_comboboxes()
+        
+    def browse_char_sprite_path(self):
+        if self.selected_char_sprite_idx is None: return
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Выбрать спрайт эмоции", "", "Изображения (*.png *.webp)"
+        )
+        if file_path:
+            self.sprite_path_input.setText(file_path)
+
+    # Background Library actions
+    def add_bg_lib(self):
+        name, ok = QInputDialog.getText(self, "Добавить фон в библиотеку", "Название фона (например: Кабинет):")
+        if not ok or not name.strip(): return
+        
+        bg_name = name.strip()
+        bg_lib = self.project_data["config"].get("backgrounds", {})
+        if bg_name in bg_lib:
+            QMessageBox.warning(self, "Ошибка", "Фон с таким именем уже существует.")
+            return
+            
+        bg_lib[bg_name] = ""
+        self.refresh_assets_tab_lists()
+        
+        row = list(bg_lib.keys()).index(bg_name)
+        self.bg_lib_list.setCurrentRow(row)
+        self.refresh_bg_combo_list()
+        
+    def delete_bg_lib(self):
+        if not self.selected_bg_lib_name: return
+        confirm = QMessageBox.question(self, "Удаление", f"Удалить фон '{self.selected_bg_lib_name}'?")
+        if confirm == QMessageBox.Yes:
+            bg_lib = self.project_data["config"].get("backgrounds", {})
+            del bg_lib[self.selected_bg_lib_name]
+            self.selected_bg_lib_name = None
+            self.refresh_assets_tab_lists()
+            self.refresh_bg_combo_list()
+            
+    def bg_lib_selected(self, index):
+        if index < 0 or self.is_updating_ui: return
+        self.selected_bg_lib_name = list(self.project_data["config"]["backgrounds"].keys())[index]
+        
+        self.is_updating_ui = True
+        bg_lib = self.project_data["config"].get("backgrounds", {})
+        self.bg_name_input.setText(self.selected_bg_lib_name)
+        self.bg_path_input.setText(bg_lib.get(self.selected_bg_lib_name, ""))
+        self.bg_props_panel.show()
+        self.is_updating_ui = False
+        
+    def bg_lib_field_changed(self):
+        if self.is_updating_ui or not self.selected_bg_lib_name: return
+        bg_lib = self.project_data["config"].get("backgrounds", {})
+        
+        old_name = self.selected_bg_lib_name
+        new_name = self.bg_name_input.text().strip()
+        bg_path = self.bg_path_input.text().strip()
+        
+        if not new_name: return
+        
+        if old_name != new_name:
+            if new_name in bg_lib:
+                QMessageBox.warning(self, "Ошибка", "Фон с таким именем уже существует.")
+                return
+            del bg_lib[old_name]
+            self.selected_bg_lib_name = new_name
+            
+        bg_lib[new_name] = bg_path
+        
+        # Refresh list item
+        self.is_updating_ui = True
+        curr_row = self.bg_lib_list.currentRow()
+        list_item = self.bg_lib_list.item(curr_row)
+        if list_item:
+            list_item.setText(new_name)
+        self.is_updating_ui = False
+        self.refresh_bg_combo_list()
+        
+    def browse_bg_lib_path(self):
+        if not self.selected_bg_lib_name: return
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Выбрать файл фона", "", "Изображения (*.png *.jpg *.jpeg *.webp)"
+        )
+        if file_path:
+            self.bg_path_input.setText(file_path)
 
 
 if __name__ == "__main__":

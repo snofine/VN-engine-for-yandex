@@ -192,18 +192,49 @@ function renderDialogueStep() {
 
     const step = scene.dialogues[currentDialogueIndex];
     
-    // Speaker name
+    // Speaker name & Custom character color
     const speakerEl = document.getElementById('speaker-name');
-    speakerEl.innerText = step.speaker || "";
-    if (!step.speaker) {
-        speakerEl.style.display = 'none';
-    } else {
-        speakerEl.style.display = 'block';
-    }
-
-    // Dialogue text
     const textEl = document.getElementById('dialogue-text');
-    textEl.innerText = step.text || "";
+    
+    // Reset styles
+    speakerEl.style.color = '';
+    textEl.style.fontStyle = 'normal';
+    textEl.style.fontWeight = 'normal';
+
+    if (step.is_thought) {
+        // Thought: Hide speaker name, format text in parentheses & italics
+        speakerEl.style.display = 'none';
+        speakerEl.innerText = "";
+        textEl.innerText = `(${step.text || ""})`;
+        textEl.style.fontStyle = 'italic';
+    } else {
+        // Standard Dialogue
+        const speakerName = step.speaker || "";
+        speakerEl.innerText = speakerName;
+        
+        if (!speakerName) {
+            speakerEl.style.display = 'none';
+        } else {
+            speakerEl.style.display = 'block';
+            // Apply custom speaker color if defined in character configuration
+            if (step.character_id && window.storyData.config && window.storyData.config.characters) {
+                const charInfo = window.storyData.config.characters[step.character_id];
+                if (charInfo && charInfo.color) {
+                    speakerEl.style.color = charInfo.color;
+                }
+            }
+        }
+        
+        textEl.innerText = step.text || "";
+        
+        // Apply inline text formatting flags
+        if (step.text_italic) {
+            textEl.style.fontStyle = 'italic';
+        }
+        if (step.text_bold) {
+            textEl.style.fontWeight = 'bold';
+        }
+    }
 
     // Sprites display
     const spriteSlots = {

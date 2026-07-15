@@ -8,7 +8,7 @@ TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templa
 def export_project(project_data, export_dir):
     """
     Exports a visual novel project to HTML5 (Yandex Games format).
-    :param project_data: dict containing 'config' and 'scenes'
+    :param project_data: dict containing 'config', 'gui', and 'scenes'
     :param export_dir: absolute path to export directory
     :return: (bool, str) status and message
     """
@@ -18,35 +18,44 @@ def export_project(project_data, export_dir):
         assets_dest_dir = os.path.join(export_dir, "assets")
         os.makedirs(assets_dest_dir, exist_ok=True)
 
-        # 1. Generate story.js
-        # We will extract local asset paths and map them to relative paths in the assets/ folder.
-        # We modify the project_data inline (a copy of it) so the exported game uses relative paths.
         exported_data = json.loads(json.dumps(project_data)) # deep copy
-        
-        # Track which local assets need to be copied
         assets_to_copy = [] # list of (source_path, dest_filename)
 
         def process_asset_path(url_or_path):
             if not url_or_path:
                 return url_or_path
-            # If it's a web URL, leave it as is
+            # If it's a web URL or color, leave it as is
             if url_or_path.startswith("http://") or url_or_path.startswith("https://") or url_or_path.startswith("data:"):
+                return url_or_path
+            # Check if it looks like a hex color
+            if url_or_path.startswith("#") or url_or_path.startswith("rgba") or url_or_path.startswith("rgb"):
                 return url_or_path
             # If it's a file path, we copy it to assets/ and use relative path
             if os.path.exists(url_or_path):
                 filename = os.path.basename(url_or_path)
-                # Ensure unique filename if needed (simplistic approach: just use basename)
                 dest_path = os.path.join(assets_dest_dir, filename)
                 assets_to_copy.append((url_or_path, dest_path))
                 return f"assets/{filename}"
             return url_or_path
 
-        # Update scene background paths
+        # 1. Process backgrounds library assets
+        config = exported_data.get("config", {})
+        bg_lib = config.get("backgrounds", {})
+        for bg_name, bg_path in list(bg_lib.items()):
+            bg_lib[bg_name] = process_asset_path(bg_path)
+
+        # 2. Process character library assets
+        char_lib = config.get("characters", {})
+        for char_id, char_info in char_lib.items():
+            sprites_map = char_info.get("sprites", {})
+            for expr_name, img_path in list(sprites_map.items()):
+                sprites_map[expr_name] = process_asset_path(img_path)
+
+        # 3. Update scene background paths and dialogue sprite paths
         for scene_id, scene in exported_data.get("scenes", {}).items():
             if "background" in scene:
                 scene["background"] = process_asset_path(scene["background"])
             
-            # Update dialogue sprite paths
             for dialogue in scene.get("dialogues", []):
                 if "sprite" in dialogue and dialogue["sprite"]:
                     if "image" in dialogue["sprite"]:
@@ -58,7 +67,7 @@ def export_project(project_data, export_dir):
         with open(story_js_path, "w", encoding="utf-8") as f:
             f.write(story_content)
 
-        # 2. Copy template files (index.html, style.css, yandex_sdk.js, game.js)
+        # 4. Copy template files (style.css, yandex_sdk.js, game.js)
         files_to_copy = ["style.css", "yandex_sdk.js", "game.js"]
         for fname in files_to_copy:
             src = os.path.join(TEMPLATES_DIR, fname)
@@ -75,8 +84,7 @@ def export_project(project_data, export_dir):
             with open(index_src, "r", encoding="utf-8") as f:
                 html_content = f.read()
             
-            # Replace title
-            title = exported_data.get("config", {}).get("title", "Моя Новелла")
+            title = config.get("title", "Моя Новелла")
             html_content = html_content.replace("<title>Visual Novel</title>", f"<title>{title}</title>")
             
             with open(index_dst, "w", encoding="utf-8") as f:
@@ -84,7 +92,7 @@ def export_project(project_data, export_dir):
         else:
             return False, "Шаблон index.html не найден."
 
-        # 3. Copy asset files
+        # 5. Copy asset files
         copied_files = set()
         for src, dst in assets_to_copy:
             if src in copied_files:
@@ -95,8 +103,7 @@ def export_project(project_data, export_dir):
             except Exception as e:
                 print(f"Ошибка при копировании ассета {src} -> {dst}: {e}")
 
-        # 4. Create a ZIP archive (optional, let's create a ZIP file alongside the folder!)
-        # This is extremely convenient for the user to upload directly to Yandex Games.
+        # 6. Create a ZIP archive
         zip_output_name = export_dir + "_yandex"
         shutil.make_archive(zip_output_name, 'zip', export_dir)
 

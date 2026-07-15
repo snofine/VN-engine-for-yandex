@@ -5,7 +5,20 @@ window.storyData = {
         "start_scene": "scene_1",
         "ads_interval_minutes": 1,
         "inapp_remove_ads_id": "no_ads_30rub",
-        "gui_profile": "Дефолтный"
+        "gui_profile": "Дефолтный",
+        "characters": {
+            "alisa": {
+                "name": "Алиса",
+                "color": "#ff007f",
+                "sprites": {
+                    "Улыбка": "https://img.icons8.com/color/344/anime-emoji.png"
+                }
+            }
+        },
+        "backgrounds": {
+            "Город": "#2c3e50",
+            "Лес": "#0b2611"
+        }
     },
     "gui": {
         "panel_bg": "rgba(18, 18, 24, 0.75)",
@@ -29,28 +42,42 @@ window.storyData = {
             "background": "#14141f",
             "dialogues": [
                 {
+                    "character_id": "",
                     "speaker": "Рассказчик",
-                    "text": "Добро пожаловать в демонстрационную новеллу!"
+                    "text": "Добро пожаловать в демонстрационную новеллу!",
+                    "is_thought": false,
+                    "text_bold": true,
+                    "text_italic": false,
+                    "sprite": {"position": "center", "image": ""}
                 },
                 {
+                    "character_id": "alisa",
                     "speaker": "Алиса",
                     "text": "Привет! Я твой первый персонаж. И я могу общаться с тобой.",
+                    "is_thought": false,
+                    "text_bold": false,
+                    "text_italic": false,
                     "sprite": {
                         "position": "center",
                         "image": "https://img.icons8.com/color/344/anime-emoji.png"
                     }
                 },
                 {
-                    "speaker": "Алиса",
-                    "text": "Этот проект полностью собран в No-Code конструкторе визуальных новелл myvn.",
-                    "sprite": {
-                        "position": "center",
-                        "image": "https://img.icons8.com/color/344/anime-emoji.png"
-                    }
+                    "character_id": "",
+                    "speaker": "",
+                    "text": "Хм... Она выглядит очень дружелюбно.",
+                    "is_thought": true,
+                    "text_bold": false,
+                    "text_italic": true,
+                    "sprite": {"position": "center", "image": ""}
                 },
                 {
+                    "character_id": "alisa",
                     "speaker": "Алиса",
                     "text": "Давай проверим выбор сцен. Куда отправимся?",
+                    "is_thought": false,
+                    "text_bold": false,
+                    "text_italic": false,
                     "sprite": {
                         "position": "center",
                         "image": "https://img.icons8.com/color/344/anime-emoji.png"
@@ -72,12 +99,21 @@ window.storyData = {
             "background": "#0b2611",
             "dialogues": [
                 {
+                    "character_id": "",
                     "speaker": "Рассказчик",
-                    "text": "Лес встретил вас прохладой и загадочным шепотом листьев."
+                    "text": "Лес встретил вас прохладой и загадочным шепотом листьев.",
+                    "is_thought": false,
+                    "text_bold": false,
+                    "text_italic": false,
+                    "sprite": {"position": "center", "image": ""}
                 },
                 {
+                    "character_id": "alisa",
                     "speaker": "Алиса",
                     "text": "Ого! Тут темновато. Будь осторожен, реклама показывается раз в минуту на переходах!",
+                    "is_thought": false,
+                    "text_bold": false,
+                    "text_italic": false,
                     "sprite": {
                         "position": "center",
                         "image": "https://img.icons8.com/color/344/anime-emoji.png"
@@ -95,12 +131,21 @@ window.storyData = {
             "background": "#2c3e50",
             "dialogues": [
                 {
+                    "character_id": "",
                     "speaker": "Рассказчик",
-                    "text": "Город сиял неоновыми огнями и шумел машинами."
+                    "text": "Город сиял неоновыми огнями и шумел машинами.",
+                    "is_thought": false,
+                    "text_bold": false,
+                    "text_italic": false,
+                    "sprite": {"position": "center", "image": ""}
                 },
                 {
+                    "character_id": "alisa",
                     "speaker": "Алиса",
                     "text": "Городская суета... Тут гораздо безопаснее леса. Вернемся?",
+                    "is_thought": false,
+                    "text_bold": false,
+                    "text_italic": false,
                     "sprite": {
                         "position": "center",
                         "image": "https://img.icons8.com/color/344/anime-emoji.png"
