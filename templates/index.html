@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Visual Novel</title>
+    <!-- Yandex Games SDK -->
+    <script src="https://yandex.ru/games/sdk/v2"></script>
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Game background image -->
+        <div id="bg-layer"></div>
+        
+        <!-- Character sprites layer -->
+        <div id="sprites-layer">
+            <img id="sprite-left" class="sprite" src="" alt="Left Character">
+            <img id="sprite-center" class="sprite" src="" alt="Center Character">
+            <img id="sprite-right" class="sprite" src="" alt="Right Character">
+        </div>
+
+        <!-- Header Panel with HUD buttons -->
+        <div id="header-panel">
+            <div id="game-title">Новелла</div>
+            <div style="display: flex; gap: 10px;">
+                <button id="remove-ads-btn" class="hud-btn" style="display: none;" onclick="purchaseAdsRemoval()">
+                    💎 Отключить рекламу
+                </button>
+                <button id="reset-btn" class="hud-btn" onclick="restartGame()">
+                    🔄 С начала
+                </button>
+            </div>
+        </div>
+
+        <!-- Choices Box Container (Center) -->
+        <div id="choices-panel" style="display: none;"></div>
+
+        <!-- Dialogue Box Container (Bottom) -->
+        <div id="ui-layer">
+            <div id="dialogue-panel" onclick="onDialogueClick()">
+                <div id="speaker-name">Имя</div>
+                <div id="dialogue-text">Текст диалога...</div>
+                <div id="next-indicator">▶</div>
+            </div>
+        </div>
+
+        <!-- Cover Menu Screen -->
+        <div id="menu-screen">
+            <h1 class="menu-title" id="menu-title-text">Моя Новелла</h1>
+            <div class="menu-buttons">
+                <button class="menu-btn primary" onclick="startGame()">Начать игру</button>
+                <button id="menu-remove-ads-btn" class="menu-btn" style="display: none;" onclick="purchaseAdsRemoval()">💎 Без рекламы 30 руб.</button>
+            </div>
+        </div>
+
+        <!-- Pause Overlay for Ads and interruptions -->
+        <div id="pause-overlay">
+            <h2 style="font-size: 28px; color: #fff; margin-bottom: 10px;">Пауза</h2>
+            <p style="font-size: 16px; color: #aaa;">Реклама...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="story.js"></script>
+    <script src="yandex_sdk.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>

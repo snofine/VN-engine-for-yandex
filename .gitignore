@@ -1,0 +1,11 @@
+# Git ignore for myvn project
+.venv/
+venv/
+__pycache__/
+*.pyc
+export/
+*.zip
+.idea/
+.vscode/
+*.json
+!templates/*.json
