@@ -29,6 +29,18 @@ window.addEventListener('DOMContentLoaded', () => {
     
     // Keyboard support
     window.addEventListener('keydown', handleKeyPress);
+
+    // Screen click to advance (ideal when dialogue panel is hidden)
+    const container = document.getElementById('game-container');
+    if (container) {
+        container.addEventListener('click', (e) => {
+            // Ignore clicks on buttons, choices, volume slider, or dialogue-panel itself (already has inline onclick)
+            if (e.target.closest('button') || e.target.closest('.choice-btn') || e.target.closest('#volume-slider') || e.target.closest('#dialogue-panel')) {
+                return;
+            }
+            onDialogueClick();
+        });
+    }
 });
 
 // Keyboard handler
@@ -501,22 +513,33 @@ function renderDialogueStep() {
 
     let formattedText = '';
 
-    if (step.is_fullscreen_text) {
-        // Fullscreen Text Mode
+    // Check if we should hide dialogue box (either fullscreen text or fullscreen sprite is active)
+    const isFullscreenSprite = step.sprite && step.sprite.position === 'fullscreen' && step.sprite.image;
+    const hideDialogueBox = step.is_fullscreen_text || isFullscreenSprite;
+
+    if (hideDialogueBox) {
+        // Fullscreen Mode
         uiLayer.style.display = 'none';
-        fsLayer.style.display = 'flex';
-        setTimeout(() => fsLayer.classList.add('active'), 10);
         
-        formattedText = parseDialogueText(step.text || "");
-        
-        if (step.text_italic) {
-            fsContent.style.fontStyle = 'italic';
+        if (step.is_fullscreen_text) {
+            fsLayer.style.display = 'flex';
+            setTimeout(() => fsLayer.classList.add('active'), 10);
+            
+            formattedText = parseDialogueText(step.text || "");
+            
+            if (step.text_italic) {
+                fsContent.style.fontStyle = 'italic';
+            }
+            if (step.text_bold) {
+                fsContent.style.fontWeight = 'bold';
+            }
+            
+            startTypewriter(fsContent, formattedText);
+        } else {
+            fsLayer.classList.remove('active');
+            fsLayer.style.display = 'none';
+            stopTypewriter();
         }
-        if (step.text_bold) {
-            fsContent.style.fontWeight = 'bold';
-        }
-        
-        startTypewriter(fsContent, formattedText);
     } else {
         // Normal dialogue box mode
         fsLayer.classList.remove('active');
