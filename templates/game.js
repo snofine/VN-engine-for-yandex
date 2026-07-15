@@ -158,17 +158,7 @@ async function initEngine() {
         setTimeout(() => { loadingScreen.style.display = 'none'; }, 600);
     }
 
-    // Check if there's a saved game
-    if (hasSavedGame()) {
-        const menuBtns = document.querySelector('.menu-buttons');
-        if (menuBtns) {
-            const continueBtn = document.createElement('button');
-            continueBtn.className = 'menu-btn';
-            continueBtn.innerText = '▶ Продолжить';
-            continueBtn.onclick = () => loadGameState();
-            menuBtns.insertBefore(continueBtn, menuBtns.firstChild);
-        }
-    }
+    // Saves disabled
 }
 
 // Start visual novel
@@ -193,7 +183,6 @@ function startGame() {
 function restartGame() {
     if (!confirm("Вы уверены, что хотите начать заново?")) return;
     
-    clearSavedGame();
     isMenuVisible = false;
     const menuScreen = document.getElementById('menu-screen');
     menuScreen.style.display = 'none';
@@ -289,8 +278,7 @@ function loadScene(sceneId) {
     // Present first dialogue step
     renderDialogueStep();
     
-    // Auto-save progress
-    saveGameState();
+    // Progress auto-save disabled
 }
 
 // BGM crossfade helpers
@@ -633,7 +621,6 @@ function onDialogueClick() {
     if (currentDialogueIndex < scene.dialogues.length - 1) {
         currentDialogueIndex++;
         renderDialogueStep();
-        saveGameState();
     } else {
         showSceneEndOptions();
     }
@@ -685,7 +672,6 @@ function showSceneEndOptions() {
             <div class="choice-btn" style="--choice-delay: 0.3s" onclick="restartGame()">🔄 Играть заново</div>
         `;
         choicesPanel.style.display = 'flex';
-        clearSavedGame();
     }
 }
 
@@ -770,88 +756,7 @@ function muteAllAudio(shouldMute) {
     }
 }
 
-// Save / Load game state via localStorage
-function getStorageKey() {
-    const title = (window.storyData && window.storyData.config && window.storyData.config.title) || "myvn";
-    return `myvn_save_${title}`;
-}
-
-function saveGameState() {
-    try {
-        const state = {
-            sceneId: currentSceneId,
-            dialogueIndex: currentDialogueIndex,
-            timestamp: Date.now()
-        };
-        localStorage.setItem(getStorageKey(), JSON.stringify(state));
-    } catch (e) {
-        console.log("Failed to save game state:", e);
-    }
-}
-
-function hasSavedGame() {
-    try {
-        return !!localStorage.getItem(getStorageKey());
-    } catch (e) {
-        return false;
-    }
-}
-
-function loadGameState() {
-    try {
-        const data = JSON.parse(localStorage.getItem(getStorageKey()));
-        if (data && data.sceneId && window.storyData.scenes[data.sceneId]) {
-            isMenuVisible = false;
-            const menuScreen = document.getElementById('menu-screen');
-            menuScreen.style.opacity = '0';
-            setTimeout(() => { menuScreen.style.display = 'none'; }, 500);
-            
-            loadScene(data.sceneId);
-            // Advance to saved dialogue index
-            const targetIdx = data.dialogueIndex || 0;
-            for (let i = 0; i < targetIdx; i++) {
-                const scene = window.storyData.scenes[currentSceneId];
-                if (scene && scene.dialogues && i < scene.dialogues.length - 1) {
-                    currentDialogueIndex = i + 1;
-                }
-            }
-            if (targetIdx > 0) renderDialogueStep();
-        } else {
-            startGame();
-        }
-    } catch (e) {
-        console.log("Failed to load saved game:", e);
-        startGame();
-    }
-}
-
-function clearSavedGame() {
-    try {
-        localStorage.removeItem(getStorageKey());
-    } catch (e) {
-        // Ignore
-    }
-}
-
-// HUD save/load buttons
-function saveGameManual() {
-    saveGameState();
-    // Show brief notification
-    const indicator = document.getElementById('next-indicator');
-    if (indicator) {
-        const old = indicator.innerText;
-        indicator.innerText = "💾";
-        setTimeout(() => { indicator.innerText = old; }, 1000);
-    }
-}
-
-function loadGameManual() {
-    if (hasSavedGame()) {
-        loadGameState();
-    } else {
-        alert("Нет сохранённого прогресса.");
-    }
-}
+// Saves disabled
 
 // Adaptive scale function to make it work on mobile and different resolutions
 function autoScaleGame() {

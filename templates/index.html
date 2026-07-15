@@ -196,13 +196,6 @@
                     <span class="volume-label" title="Громкость">🔊</span>
                     <input type="range" id="volume-slider" min="0" max="100" value="100" class="volume-slider" title="Громкость">
                 </div>
-                <!-- Save / Load Buttons -->
-                <button id="save-btn" class="hud-btn" onclick="saveGame()" title="Сохранить прогресс">
-                    💾 Сохранить
-                </button>
-                <button id="load-btn" class="hud-btn" onclick="loadGame()" title="Загрузить сохранение">
-                    📂 Загрузить
-                </button>
                 <!-- Restart Button -->
                 <button id="reset-btn" class="hud-btn" onclick="restartGame()">
                     🔄 С начала
@@ -227,7 +220,6 @@
             <h1 class="menu-title" id="menu-title-text">Моя Новелла</h1>
             <div class="menu-buttons">
                 <button class="menu-btn primary" onclick="startGame()">Начать игру</button>
-                <button id="menu-continue-btn" class="menu-btn" style="display: none;" onclick="loadGame()">📂 Продолжить</button>
                 <button id="menu-remove-ads-btn" class="menu-btn" style="display: none;" onclick="purchaseAdsRemoval()">💎 Без рекламы 30 руб.</button>
             </div>
         </div>
