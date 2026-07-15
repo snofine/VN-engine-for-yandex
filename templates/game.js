@@ -450,14 +450,14 @@ function stopTypewriter() {
         typewriterTimer = null;
     }
     isTypewriterActive = false;
-    const textEl = document.getElementById('dialogue-text');
-    if (textEl) textEl.classList.remove('typewriter-active');
+    const textEls = document.querySelectorAll('.typewriter-active');
+    textEls.forEach(el => el.classList.remove('typewriter-active'));
 }
 
 function skipTypewriter() {
     if (isTypewriterActive) {
+        const textEl = document.querySelector('.typewriter-active');
         stopTypewriter();
-        const textEl = document.getElementById('dialogue-text');
         if (textEl) textEl.innerHTML = typewriterFullHTML;
         return true; // Indicate we consumed the click
     }
@@ -485,7 +485,10 @@ function renderDialogueStep() {
         sfx.play().catch(e => console.log("SFX playback blocked or failed:", e));
     }
     
-    // Speaker name & Custom character color
+    // Elements
+    const uiLayer = document.getElementById('ui-layer');
+    const fsLayer = document.getElementById('fullscreen-text-layer');
+    const fsContent = document.getElementById('fullscreen-text-content');
     const speakerEl = document.getElementById('speaker-name');
     const textEl = document.getElementById('dialogue-text');
     
@@ -493,46 +496,70 @@ function renderDialogueStep() {
     speakerEl.style.color = '';
     textEl.style.fontStyle = 'normal';
     textEl.style.fontWeight = 'normal';
+    fsContent.style.fontStyle = 'normal';
+    fsContent.style.fontWeight = 'normal';
 
     let formattedText = '';
 
-    if (step.is_thought) {
-        // Thought: Hide speaker name, format text in parentheses & italics
-        speakerEl.style.display = 'none';
-        speakerEl.innerText = "";
-        formattedText = `(${parseDialogueText(step.text || "")})`;
-        textEl.style.fontStyle = 'italic';
-    } else {
-        // Standard Dialogue
-        const speakerName = step.speaker || "";
-        speakerEl.innerText = speakerName;
-        
-        if (!speakerName) {
-            speakerEl.style.display = 'none';
-        } else {
-            speakerEl.style.display = 'block';
-            // Apply custom speaker color if defined in character configuration
-            if (step.character_id && window.storyData.config && window.storyData.config.characters) {
-                const charInfo = window.storyData.config.characters[step.character_id];
-                if (charInfo && charInfo.color) {
-                    speakerEl.style.color = charInfo.color;
-                }
-            }
-        }
+    if (step.is_fullscreen_text) {
+        // Fullscreen Text Mode
+        uiLayer.style.display = 'none';
+        fsLayer.style.display = 'flex';
+        setTimeout(() => fsLayer.classList.add('active'), 10);
         
         formattedText = parseDialogueText(step.text || "");
         
-        // Apply inline text formatting flags
         if (step.text_italic) {
-            textEl.style.fontStyle = 'italic';
+            fsContent.style.fontStyle = 'italic';
         }
         if (step.text_bold) {
-            textEl.style.fontWeight = 'bold';
+            fsContent.style.fontWeight = 'bold';
         }
+        
+        startTypewriter(fsContent, formattedText);
+    } else {
+        // Normal dialogue box mode
+        fsLayer.classList.remove('active');
+        fsLayer.style.display = 'none';
+        uiLayer.style.display = 'flex';
+        
+        if (step.is_thought) {
+            // Thought: Hide speaker name, format text in parentheses & italics
+            speakerEl.style.display = 'none';
+            speakerEl.innerText = "";
+            formattedText = `(${parseDialogueText(step.text || "")})`;
+            textEl.style.fontStyle = 'italic';
+        } else {
+            // Standard Dialogue
+            const speakerName = step.speaker || "";
+            speakerEl.innerText = speakerName;
+            
+            if (!speakerName) {
+                speakerEl.style.display = 'none';
+            } else {
+                speakerEl.style.display = 'block';
+                // Apply custom speaker color if defined in character configuration
+                if (step.character_id && window.storyData.config && window.storyData.config.characters) {
+                    const charInfo = window.storyData.config.characters[step.character_id];
+                    if (charInfo && charInfo.color) {
+                        speakerEl.style.color = charInfo.color;
+                    }
+                }
+            }
+            
+            formattedText = parseDialogueText(step.text || "");
+            
+            // Apply inline text formatting flags
+            if (step.text_italic) {
+                textEl.style.fontStyle = 'italic';
+            }
+            if (step.text_bold) {
+                textEl.style.fontWeight = 'bold';
+            }
+        }
+        
+        startTypewriter(textEl, formattedText);
     }
-
-    // Start typewriter effect
-    startTypewriter(textEl, formattedText);
 
     // Sprites display
     const spriteSlots = {
@@ -633,9 +660,12 @@ function showSceneEndOptions() {
 
     // Hide dialogue panel so user is forced to make a choice
     const uiLayer = document.getElementById('ui-layer');
+    const fsLayer = document.getElementById('fullscreen-text-layer');
     
     if (scene.choices && scene.choices.length > 0) {
         uiLayer.style.display = 'none'; // Hide dialogue panel
+        fsLayer.classList.remove('active');
+        fsLayer.style.display = 'none';
         
         const choicesPanel = document.getElementById('choices-panel');
         choicesPanel.innerHTML = '';
@@ -663,6 +693,8 @@ function showSceneEndOptions() {
         // End of game
         stopTypewriter();
         uiLayer.style.display = 'none';
+        fsLayer.classList.remove('active');
+        fsLayer.style.display = 'none';
         const choicesPanel = document.getElementById('choices-panel');
         choicesPanel.innerHTML = `
             <div class="end-screen">

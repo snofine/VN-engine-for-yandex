@@ -51,6 +51,17 @@ window.storyData = {
             "dialogues": [
                 {
                     "character_id": "",
+                    "speaker": "",
+                    "text": "Часть 1: Начало Истории",
+                    "is_thought": false,
+                    "is_fullscreen_text": true,
+                    "text_bold": true,
+                    "text_italic": false,
+                    "sfx": "",
+                    "sprite": {"position": "center", "image": ""}
+                },
+                {
+                    "character_id": "",
                     "speaker": "Рассказчик",
                     "text": "Добро пожаловать в демонстрационную новеллу с музыкой!",
                     "is_thought": false,

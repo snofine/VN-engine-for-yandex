@@ -482,6 +482,10 @@ class VisualNovelEditor(QMainWindow):
         self.diag_is_thought.stateChanged.connect(self.diag_is_thought_changed)
         format_layout.addWidget(self.diag_is_thought)
         
+        self.diag_is_fullscreen_text = QCheckBox("🖥️ На весь экран")
+        self.diag_is_fullscreen_text.stateChanged.connect(self.diag_is_fullscreen_changed)
+        format_layout.addWidget(self.diag_is_fullscreen_text)
+        
         self.diag_text_bold = QCheckBox("<b>Ж</b>")
         self.diag_text_bold.stateChanged.connect(self.save_current_dialogue_fields)
         format_layout.addWidget(self.diag_text_bold)
@@ -536,9 +540,9 @@ class VisualNovelEditor(QMainWindow):
         self.sprite_input.setPlaceholderText("Путь к файлу...")
         self.sprite_input.textChanged.connect(self.save_current_dialogue_fields)
         sprite_raw_layout.addWidget(self.sprite_input)
-        sprite_browse = QPushButton("Обзор")
-        sprite_browse.clicked.connect(self.browse_sprite_image)
-        sprite_raw_layout.addWidget(sprite_browse)
+        self.sprite_browse_btn = QPushButton("Обзор")
+        self.sprite_browse_btn.clicked.connect(self.browse_sprite_image)
+        sprite_raw_layout.addWidget(self.sprite_browse_btn)
         diag_detail_layout.addRow("Файл спрайта:", self.sprite_raw_widget)
         
         self.sprite_pos_type = QComboBox()
@@ -1370,6 +1374,7 @@ class VisualNovelEditor(QMainWindow):
 
     def set_dialogue_fields_enabled(self, enabled):
         self.diag_is_thought.setEnabled(enabled)
+        self.diag_is_fullscreen_text.setEnabled(enabled)
         self.diag_text_bold.setEnabled(enabled)
         self.diag_text_italic.setEnabled(enabled)
         self.diag_char_combo.setEnabled(enabled)
@@ -1385,7 +1390,9 @@ class VisualNovelEditor(QMainWindow):
         self.sprite_y_coord.setEnabled(enabled)
         
         if enabled:
-            self.toggle_thought_ui_state()
+            self.toggle_fullscreen_ui_state()
+            if not self.diag_is_fullscreen_text.isChecked():
+                self.toggle_thought_ui_state()
 
     def set_choice_fields_enabled(self, enabled):
         self.choice_text_input.setEnabled(enabled)
@@ -1709,6 +1716,7 @@ class VisualNovelEditor(QMainWindow):
         
         # Load formatting
         self.diag_is_thought.setChecked(step.get("is_thought", False))
+        self.diag_is_fullscreen_text.setChecked(step.get("is_fullscreen_text", False))
         self.diag_text_bold.setChecked(step.get("text_bold", False))
         self.diag_text_italic.setChecked(step.get("text_italic", False))
         
@@ -1809,7 +1817,9 @@ class VisualNovelEditor(QMainWindow):
             self.diag_sprite_expr_combo.setCurrentIndex(0)
             self.sprite_raw_widget.show()
             
-        self.toggle_thought_ui_state()
+        self.toggle_fullscreen_ui_state()
+        if not self.diag_is_fullscreen_text.isChecked():
+            self.toggle_thought_ui_state()
         self.unblock_ui_updates()
         
     def clear_dialogue_fields(self):
@@ -1823,6 +1833,7 @@ class VisualNovelEditor(QMainWindow):
         self.sprite_x_coord.hide()
         self.sprite_y_coord.hide()
         self.diag_is_thought.setChecked(False)
+        self.diag_is_fullscreen_text.setChecked(False)
         self.diag_text_bold.setChecked(False)
         self.diag_text_italic.setChecked(False)
         self.diag_char_combo.setCurrentIndex(0)
@@ -1843,12 +1854,13 @@ class VisualNovelEditor(QMainWindow):
         step = scene["dialogues"][self.selected_dialogue_idx]
         
         step["is_thought"] = self.diag_is_thought.isChecked()
+        step["is_fullscreen_text"] = self.diag_is_fullscreen_text.isChecked()
         step["text_bold"] = self.diag_text_bold.isChecked()
         step["text_italic"] = self.diag_text_italic.isChecked()
         step["sfx"] = self.diag_sfx_input.text().strip()
         
         # Save character details
-        if step["is_thought"]:
+        if step["is_thought"] or step.get("is_fullscreen_text"):
             step["character_id"] = ""
             step["speaker"] = ""
         else:
@@ -1875,15 +1887,40 @@ class VisualNovelEditor(QMainWindow):
         text_preview = step["text"][:30] + "..." if len(step["text"]) > 30 else step["text"]
         list_item = self.dialogue_list.item(self.selected_dialogue_idx)
         if list_item:
-            if step["is_thought"]:
+            if step.get("is_fullscreen_text"):
+                list_item.setText(f"{self.selected_dialogue_idx+1}. 🖥️ [Экран] {text_preview}")
+            elif step["is_thought"]:
                 list_item.setText(f"{self.selected_dialogue_idx+1}. 💭 ({text_preview})")
             else:
                 list_item.setText(f"{self.selected_dialogue_idx+1}. [{step['speaker']}] {text_preview}")
         self.unblock_ui_updates()
 
+    def diag_is_fullscreen_changed(self, state):
+        self.toggle_fullscreen_ui_state()
+        self.save_current_dialogue_fields()
+        self.mark_dirty()
+        
+    def toggle_fullscreen_ui_state(self):
+        is_fs = self.diag_is_fullscreen_text.isChecked()
+        self.diag_char_combo.setDisabled(is_fs)
+        self.speaker_input.setDisabled(is_fs)
+        self.diag_is_thought.setDisabled(is_fs)
+        self.sprite_input.setDisabled(is_fs)
+        self.sprite_pos_combo.setDisabled(is_fs)
+        self.sprite_pos_type.setDisabled(is_fs)
+        self.sprite_x_coord.setDisabled(is_fs)
+        self.sprite_y_coord.setDisabled(is_fs)
+        self.diag_sprite_expr_combo.setDisabled(is_fs)
+        if hasattr(self, 'sprite_browse_btn'):
+            self.sprite_browse_btn.setDisabled(is_fs)
+        if is_fs:
+            self.speaker_input.clear()
+            self.diag_is_thought.setChecked(False)
+
     def diag_is_thought_changed(self, state):
         self.toggle_thought_ui_state()
         self.save_current_dialogue_fields()
+        self.mark_dirty()
         
     def toggle_thought_ui_state(self):
         is_thought = self.diag_is_thought.isChecked()
